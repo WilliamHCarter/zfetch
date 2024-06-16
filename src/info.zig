@@ -6,9 +6,8 @@ pub fn fetchEnvVar(key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(std.heap.page_allocator, key) catch "Unknown";
 }
 
-fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
-    var child = std.process.Child.init(argv, allocator);
-
+pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
+    var child = std.process.Child.init(argv, allocator, .Pipe);
     const result = try child.stdout.?.reader().readAllAlloc(allocator, 1024);
     defer allocator.free(result);
 
@@ -20,7 +19,7 @@ fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback:
     return std.mem.trim(u8, result, "\n");
 }
 
-const KernelType = enum {
+pub const KernelType = enum {
     Linux,
     Darwin,
     BSD,
@@ -28,7 +27,7 @@ const KernelType = enum {
     Unknown,
 };
 
-fn getKernelType() KernelType {
+pub fn getKernelType() KernelType {
     return switch (builtin.os.tag) {
         .linux => .Linux,
         .macos => .Darwin,
@@ -50,19 +49,19 @@ pub fn getOS() ![]const u8 {
 }
 
 fn linuxOS() ![]const u8 {
-    const os_release = "/etc/os-release";
-    const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
-    defer file.close();
+    // const os_release = "/etc/os-release";
+    // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
+    // defer file.close();
 
-    var buf: [1024]u8 = undefined;
-    const contents = try file.readAll(&buf);
+    // var buf: [1024]u8 = undefined;
+    // const contents = try file.readAll(&buf);
 
-    var iter = std.mem.split(contents, "\n");
-    while (iter.next()) |line| {
-        if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
-            return std.mem.trim(u8, line[12..], "\"");
-        }
-    }
+    // var iter = std.mem.split(contents, "\n");
+    // while (iter.next()) |line| {
+    //     if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
+    //         return std.mem.trim(u8, line[12..], "\"");
+    //     }
+    // }
 
     return "Linux";
 }
@@ -83,20 +82,54 @@ fn bsdOS() ![]const u8 {
 }
 
 fn windowsOS() ![]const u8 {
-    const stdout = std.io.getStdOut().writer();
-    var info: std.os.windows.OSVERSIONINFOW = undefined;
-    info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
+    // const stdout = std.io.getStdOut().writer();
+    // var info: std.os.windows.OSVERSIONINFOW = undefined;
+    // info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
 
-    if (std.os.windows.ntdll.RtlGetVersion(&info) != .SUCCESS) {
-        try stdout.writeAll("Failed to retrieve Windows version information\n");
-        return "Windows";
-    }
+    // if (std.os.windows.ntdll.RtlGetVersion(&info) != .SUCCESS) {
+    //     try stdout.writeAll("Failed to retrieve Windows version information\n");
+    //     return "Windows";
+    // }
 
-    const os_string = try std.fmt.allocPrint(std.heap.page_allocator, "Windows {d}.{d}", .{
-        info.dwMajorVersion,
-        info.dwMinorVersion,
-    });
-    return os_string;
+    // const os_string = try std.fmt.allocPrint(std.heap.page_allocator, "Windows {d}.{d}", .{
+    //     info.dwMajorVersion,
+    //     info.dwMinorVersion,
+    // });
+    // return os_string;
+    return "Windows";
+}
+
+//================= Fetch CPU =================
+pub fn getCPU() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxCPU(),
+        .Darwin => darwinCPU(),
+        .BSD => bsdCPU(),
+        .Windows => windowsCPU(),
+        .Unknown => return error.UnknownCPU,
+    };
+}
+
+fn linuxCPU() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lscpu", "-p=cpu" }, "Unknown");
+}
+
+fn darwinCPU() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown");
+}
+
+fn bsdCPU() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "Unknown");
+}
+
+fn windowsCPU() ![]const u8 {
+    // const stdout = std.io.getStdOut().writer();
+    // var info: std.os.windows.SYSTEM_INFO = undefined;
+    // std.os.windows.kernel32.GetSystemInfo(&info);
+
+    // const cpu_string = try std.fmt.allocPrint(std.heap.page_allocator, "CPU: {d} cores", .{ info.dwNumberOfProcessors });
+    // return cpu_string;
+    return "Unknown";
 }
 
 //================= Fetch Functions =================
