@@ -1,139 +1,54 @@
+//==================================================================================================
+// File:       info.zig
+// Contents:   Information external to the OS used by the program.
+// Author:     Will Carter
+//==================================================================================================
+
 const std = @import("std");
-const builtin = @import("builtin");
 
-//================= Helpers =================
-pub fn fetchEnvVar(key: []const u8) []const u8 {
-    return std.process.getEnvVarOwned(std.heap.page_allocator, key) catch "Unknown";
-}
-
-pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
-    var child = std.process.Child.init(argv, allocator, .Pipe);
-    const result = try child.stdout.?.reader().readAllAlloc(allocator, 1024);
-    defer allocator.free(result);
-
-    const wait_result = try child.wait();
-    if (wait_result != .Exited or wait_result.Exited != 0) {
-        return fallback;
-    }
-
-    return std.mem.trim(u8, result, "\n");
-}
-
-pub const KernelType = enum {
-    Linux,
-    Darwin,
-    BSD,
-    Windows,
-    Unknown,
+const VersionError = error{
+    InvalidVersion,
+    UnknownVersion,
 };
 
-pub fn getKernelType() KernelType {
-    return switch (builtin.os.tag) {
-        .linux => .Linux,
-        .macos => .Darwin,
-        .freebsd, .openbsd, .netbsd, .dragonfly => .BSD,
-        .windows => .Windows,
-        else => .Unknown,
+pub fn darwinVersionName(version: []const u8) ![]const u8 {
+    const version_ranges = &[_][2][]const u8{
+        .{ "10.0", "Cheetah" },
+        .{ "10.1", "Puma" },
+        .{ "10.2", "Jaguar" },
+        .{ "10.3", "Panther" },
+        .{ "10.4", "Tiger" },
+        .{ "10.5", "Leopard" },
+        .{ "10.6", "Snow Leopard" },
+        .{ "10.7", "Lion" },
+        .{ "10.8", "Mountain Lion" },
+        .{ "10.9", "Mavericks" },
+        .{ "10.10", "Yosemite" },
+        .{ "10.11", "El Capitan" },
+        .{ "10.12", "Sierra" },
+        .{ "10.13", "High Sierra" },
+        .{ "10.14", "Mojave" },
+        .{ "10.15", "Catalina" },
+        .{ "11", "Big Sur" },
+        .{ "12", "Monterey" },
+        .{ "13", "Ventura" },
     };
-}
 
-//================= Fetch OS =================
-pub fn getOS() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxOS(),
-        .Darwin => darwinOS(),
-        .BSD => bsdOS(),
-        .Windows => windowsOS(),
-        .Unknown => return error.UnknownOS,
-    };
-}
+    const parsed_version = std.fmt.parseFloat(f32, version) catch return VersionError.InvalidVersion;
+    var previous_name: []const u8 = "";
 
-fn linuxOS() ![]const u8 {
-    // const os_release = "/etc/os-release";
-    // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
-    // defer file.close();
+    for (version_ranges) |range| {
+        const range_version = std.fmt.parseFloat(f32, range[0]) catch return VersionError.InvalidVersion;
+        if (parsed_version >= range_version) {
+            previous_name = range[1];
+        } else {
+            break;
+        }
+    }
 
-    // var buf: [1024]u8 = undefined;
-    // const contents = try file.readAll(&buf);
+    if (previous_name.len == 0) {
+        return VersionError.UnknownVersion;
+    }
 
-    // var iter = std.mem.split(contents, "\n");
-    // while (iter.next()) |line| {
-    //     if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
-    //         return std.mem.trim(u8, line[12..], "\"");
-    //     }
-    // }
-
-    return "Linux";
-}
-
-fn darwinOS() ![]const u8 {
-    const os_name = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS");
-    const os_version = try darwinOSVersion();
-
-    return try std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ os_name, os_version });
-}
-
-fn darwinOSVersion() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productVersion" }, "Unknown");
-}
-
-fn bsdOS() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
-}
-
-fn windowsOS() ![]const u8 {
-    // const stdout = std.io.getStdOut().writer();
-    // var info: std.os.windows.OSVERSIONINFOW = undefined;
-    // info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
-
-    // if (std.os.windows.ntdll.RtlGetVersion(&info) != .SUCCESS) {
-    //     try stdout.writeAll("Failed to retrieve Windows version information\n");
-    //     return "Windows";
-    // }
-
-    // const os_string = try std.fmt.allocPrint(std.heap.page_allocator, "Windows {d}.{d}", .{
-    //     info.dwMajorVersion,
-    //     info.dwMinorVersion,
-    // });
-    // return os_string;
-    return "Windows";
-}
-
-//================= Fetch CPU =================
-pub fn getCPU() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxCPU(),
-        .Darwin => darwinCPU(),
-        .BSD => bsdCPU(),
-        .Windows => windowsCPU(),
-        .Unknown => return error.UnknownCPU,
-    };
-}
-
-fn linuxCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lscpu", "-p=cpu" }, "Unknown");
-}
-
-fn darwinCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown");
-}
-
-fn bsdCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "Unknown");
-}
-
-fn windowsCPU() ![]const u8 {
-    // const stdout = std.io.getStdOut().writer();
-    // var info: std.os.windows.SYSTEM_INFO = undefined;
-    // std.os.windows.kernel32.GetSystemInfo(&info);
-
-    // const cpu_string = try std.fmt.allocPrint(std.heap.page_allocator, "CPU: {d} cores", .{ info.dwNumberOfProcessors });
-    // return cpu_string;
-    return "Unknown";
-}
-
-//================= Fetch Functions =================
-
-pub fn getUsername() ![]const u8 {
-    return fetchEnvVar("USER");
+    return previous_name;
 }
