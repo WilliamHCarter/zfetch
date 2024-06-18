@@ -13,15 +13,23 @@ pub fn fetchEnvVar(key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(std.heap.page_allocator, key) catch "Unknown";
 }
 
-pub fn toFixedFloat(value: []const u8, precision: u32) f64 {
+pub fn toFixedFloat(value: []const u8, precision: u32) []const u8 {
     const floatValue = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch {
         std.debug.print("Invalid float value: {s}\n", .{value});
-        return 0.0;
+        return "0.0";
     };
-    const roundingFactor = std.math.pow(f64, 10, @floatFromInt(precision));
-    const roundedValue = @round(floatValue * roundingFactor) / roundingFactor;
 
-    return roundedValue;
+    var buf: [64]u8 = undefined;
+    const options = std.fmt.FormatOptions{
+        .precision = precision,
+    };
+
+    const result = std.fmt.formatFloat(buf[0..], floatValue, options) catch {
+        std.debug.print("Failed to format float value: {d}\n", .{floatValue});
+        return "0.0";
+    };
+
+    return result;
 }
 
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
@@ -156,6 +164,7 @@ fn windowsCPU() ![]const u8 {
 }
 
 //================= Fetch Memory =================
+//TODO: Refactor unit display such that memory total and used each have their own units, based on what looks cleanest.
 const MemoryUnit = enum {
     None,
     KB,
@@ -163,13 +172,19 @@ const MemoryUnit = enum {
     GB,
 };
 
-fn getDivisionFactor(unit: MemoryUnit) f64 {
-    return switch (unit) {
+fn toFixedUnit(value: []const u8, unit: MemoryUnit, precision: u32) []const u8 {
+    const divisor: f64 = switch (unit) {
         .None => 1,
         .KB => 1024,
         .MB => 1024 * 1024,
         .GB => 1024 * 1024 * 1024,
     };
+
+    const floatValue: f64 = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch -1.0;
+    var buffer: [100]u8 = undefined;
+    const formatted = std.fmt.formatFloat(buffer[0..], (floatValue / divisor), .{ .precision = precision, .mode = .decimal }) catch "-1.0";
+    std.debug.print("formatted: {s}\n", .{formatted});
+    return formatted;
 }
 
 pub fn getMemory() ![]const u8 {
@@ -187,14 +202,12 @@ fn linuxMemory() ![]const u8 {
 }
 
 fn darwinMemory(unit: MemoryUnit) ![]const u8 {
-    const division_factor = getDivisionFactor(unit);
     const mem_size = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.memsize" }, "Unknown");
-    const mem_size_in_unit: f64 = toFixedFloat(mem_size, 4);
-
+    const fmt_mem_size = toFixedUnit(mem_size, unit, 2);
     const mem_used = try execCommand(std.heap.page_allocator, &[_][]const u8{ "bash", "-c", "vm_stat | grep ' active\\|wired ' | sed 's/\\.//g' | awk '{s+=$NF} END {print s}'" }, "Unknown");
-    const mem_used_in_unit: f64 = toFixedFloat(mem_used, 4);
-
-    return std.fmt.allocPrint(std.heap.page_allocator, "{d} / {d}", .{ mem_used_in_unit / division_factor, mem_size_in_unit / division_factor });
+    const fmt_mem_used = toFixedUnit(mem_used, unit, 2);
+    std.debug.print("mem_size: {s}, fmt_mem_size: {s}, mem_used: {s}, fmt_mem_used: {s}\n", .{ mem_size, fmt_mem_size, mem_used, fmt_mem_used });
+    return std.fmt.allocPrint(std.heap.page_allocator, "{s} / {s}", .{ fmt_mem_used, fmt_mem_size });
 }
 
 fn bsdMemory() ![]const u8 {
