@@ -164,33 +164,10 @@ fn windowsCPU() ![]const u8 {
 }
 
 //================= Fetch Memory =================
-//TODO: Refactor unit display such that memory total and used each have their own units, based on what looks cleanest.
-const MemoryUnit = enum {
-    None,
-    KB,
-    MB,
-    GB,
-};
-
-fn toFixedUnit(value: []const u8, unit: MemoryUnit, precision: u32) []const u8 {
-    const divisor: f64 = switch (unit) {
-        .None => 1,
-        .KB => 1024,
-        .MB => 1024 * 1024,
-        .GB => 1024 * 1024 * 1024,
-    };
-
-    const floatValue: f64 = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch -1.0;
-    var buffer: [100]u8 = undefined;
-    const formatted = std.fmt.formatFloat(buffer[0..], (floatValue / divisor), .{ .precision = precision, .mode = .decimal }) catch "-1.0";
-    std.debug.print("formatted: {s}\n", .{formatted});
-    return formatted;
-}
-
 pub fn getMemory() ![]const u8 {
     return switch (getKernelType()) {
         .Linux => linuxMemory(),
-        .Darwin => darwinMemory(.GB),
+        .Darwin => darwinMemory(),
         .BSD => bsdMemory(),
         .Windows => windowsMemory(),
         .Unknown => return error.UnknownMemory,
@@ -201,13 +178,10 @@ fn linuxMemory() ![]const u8 {
     return execCommand(std.heap.page_allocator, &[_][]const u8{ "free", "-h" }, "Unknown");
 }
 
-fn darwinMemory(unit: MemoryUnit) ![]const u8 {
+fn darwinMemory() ![]const u8 {
     const mem_size = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.memsize" }, "Unknown");
-    const fmt_mem_size = toFixedUnit(mem_size, unit, 2);
     const mem_used = try execCommand(std.heap.page_allocator, &[_][]const u8{ "bash", "-c", "vm_stat | grep ' active\\|wired ' | sed 's/\\.//g' | awk '{s+=$NF} END {print s}'" }, "Unknown");
-    const fmt_mem_used = toFixedUnit(mem_used, unit, 2);
-    std.debug.print("mem_size: {s}, fmt_mem_size: {s}, mem_used: {s}, fmt_mem_used: {s}\n", .{ mem_size, fmt_mem_size, mem_used, fmt_mem_used });
-    return std.fmt.allocPrint(std.heap.page_allocator, "{s} / {s}", .{ fmt_mem_used, fmt_mem_size });
+    return std.fmt.allocPrint(std.heap.page_allocator, "{s} / {s}", .{ mem_used, mem_size });
 }
 
 fn bsdMemory() ![]const u8 {
@@ -215,6 +189,259 @@ fn bsdMemory() ![]const u8 {
 }
 
 fn windowsMemory() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch Uptime =================
+pub fn getUptime() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxUptime(),
+        .Darwin => darwinUptime(),
+        .BSD => bsdUptime(),
+        .Windows => windowsUptime(),
+        .Unknown => return error.UnknownUptime,
+    };
+}
+
+fn linuxUptime() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uptime", "-p" }, "Unknown");
+}
+
+fn darwinUptime() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{"uptime"}, "Unknown");
+}
+
+fn bsdUptime() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
+}
+
+fn windowsUptime() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch Packages =================
+pub fn getPackages() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxPackages(),
+        .Darwin => darwinPackages(),
+        .BSD => bsdPackages(),
+        .Windows => windowsPackages(),
+        .Unknown => return error.UnknownPackages,
+    };
+}
+
+fn linuxPackages() ![]const u8 {
+    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "dpkg", "-l" }, "Unknown");
+}
+
+fn darwinPackages() ![]const u8 {
+    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "/bin/bash", "-c", "brew list | wc -l" }, "Unknown");
+}
+
+fn bsdPackages() ![]const u8 {
+    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "pkg", "info" }, "Unknown");
+}
+
+fn windowsPackages() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch Shell =================
+pub fn getShell() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxShell(),
+        .Darwin => darwinShell(),
+        .BSD => bsdShell(),
+        .Windows => windowsShell(),
+        .Unknown => return error.UnknownShell,
+    };
+}
+
+fn linuxShell() ![]const u8 {
+    return fetchEnvVar("SHELL");
+}
+
+fn darwinShell() ![]const u8 {
+    return fetchEnvVar("SHELL");
+}
+
+fn bsdShell() ![]const u8 {
+    return fetchEnvVar("SHELL");
+}
+
+fn windowsShell() ![]const u8 {
+    return fetchEnvVar("COMSPEC");
+}
+
+//================= Fetch Terminal =================
+pub fn getTerminal() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxTerminal(),
+        .Darwin => darwinTerminal(),
+        .BSD => bsdTerminal(),
+        .Windows => windowsTerminal(),
+        .Unknown => return error.UnknownTerminal,
+    };
+}
+
+fn linuxTerminal() ![]const u8 {
+    return fetchEnvVar("TERM");
+}
+
+fn darwinTerminal() ![]const u8 {
+    return fetchEnvVar("TERM_PROGRAM");
+}
+
+fn bsdTerminal() ![]const u8 {
+    return fetchEnvVar("TERM");
+}
+
+fn windowsTerminal() ![]const u8 {
+    return fetchEnvVar("TERM");
+}
+
+//================= Fetch Resolution =================
+pub fn getResolution() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxResolution(),
+        .Darwin => darwinResolution(),
+        .BSD => bsdResolution(),
+        .Windows => windowsResolution(),
+        .Unknown => return error.UnknownResolution,
+    };
+}
+
+fn linuxResolution() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
+}
+
+fn darwinResolution() ![]const u8 {
+    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
+    const start = (std.mem.indexOf(u8, output, "Resolution: ") orelse return error.ResolutionNotFound) + "Resolution: ".len;
+    const end = std.mem.indexOf(u8, output[start..], "\n") orelse return error.ResolutionNotFound;
+    const resolution = output[start .. start + end];
+    return resolution;
+}
+
+fn bsdResolution() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
+}
+
+fn windowsResolution() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch DE/WM =================
+pub fn getDE() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxDE(),
+        .Darwin => darwinDE(),
+        .BSD => bsdDE(),
+        .Windows => windowsDE(),
+        .Unknown => return error.UnknownDE,
+    };
+}
+
+fn linuxDE() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+}
+
+fn darwinDE() ![]const u8 {
+    return "Aqua";
+}
+
+fn bsdDE() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+}
+
+fn windowsDE() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch WM =================
+pub fn getWM() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxWM(),
+        .Darwin => darwinWM(),
+        .BSD => bsdWM(),
+        .Windows => windowsWM(),
+        .Unknown => return error.UnknownWM,
+    };
+}
+
+fn linuxWM() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+}
+
+fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
+    const wm_commands = &[_][]const u8{
+        "ps -e | grep -q '[S]pectacle'",
+        "ps -e | grep -q '[A]methyst'",
+        "ps -e | grep -q '[k]wm'",
+        "ps -e | grep -q '[c]hun[k]wm'",
+        "ps -e | grep -q '[y]abai'",
+        "ps -e | grep -q '[R]ectangle'",
+    };
+
+    const wm_names = &[_][]const u8{
+        "Spectacle",
+        "Amethyst",
+        "Kwm",
+        "chunkwm",
+        "yabai",
+        "Rectangle",
+    };
+
+    for (wm_commands) |cmd| {
+        const result = try std.ChildProcess.exec(.{
+            .allocator = allocator,
+            .argv = &[_][]const u8{ "sh", "-c", cmd },
+        });
+        defer {
+            allocator.free(result.stdout);
+            allocator.free(result.stderr);
+        }
+
+        if (result.term.Exited == 0) {
+            return try std.fmt.allocPrint(allocator, "WM: {s}", .{cmd});
+        }
+    }
+
+    return "WM: Quartz Compositor";
+}
+
+fn bsdWM() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+}
+
+fn windowsWM() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch Theme =================
+pub fn getTheme() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxTheme(),
+        .Darwin => darwinTheme(),
+        .BSD => bsdTheme(),
+        .Windows => windowsTheme(),
+        .Unknown => return error.UnknownTheme,
+    };
+}
+
+fn linuxTheme() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+}
+
+fn darwinTheme() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+}
+
+fn bsdTheme() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+}
+
+fn windowsTheme() ![]const u8 {
     return "TODO";
 }
 
