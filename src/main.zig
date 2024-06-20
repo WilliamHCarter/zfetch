@@ -6,7 +6,7 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     const username = try fetch.getUsername();
     const os = try fetch.getOS();
-    const host = try fetch.getHost();
+    const host = try fetch.getHostDevice();
     const kernel = try fetch.getKernel();
     const uptime = try fetch.getUptime();
     const packages = try fetch.getPackages();

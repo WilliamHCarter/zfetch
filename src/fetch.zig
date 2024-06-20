@@ -130,6 +130,29 @@ fn windowsOS() ![]const u8 {
     return "Windows";
 }
 
+//================= Fetch Host Device =================
+pub fn getHostDevice() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxDevice(),
+        .Darwin => darwinDevice(),
+        else => return error.UnknownModel,
+    };
+}
+
+fn linuxDevice() ![]const u8 {
+    return "Unknown";
+}
+
+fn darwinDevice() ![]const u8 {
+    const kextstat_output = try execCommand(std.heap.page_allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
+    if (std.mem.indexOf(u8, kextstat_output, "FakeSMC") != null or std.mem.indexOf(u8, kextstat_output, "VirtualSMC") != null) {
+        const hw_model = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+        return std.fmt.allocPrint(std.heap.page_allocator, "Hackintosh (SMBIOS: {s})", .{hw_model});
+    } else {
+        return try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+    }
+}
+
 //================= Fetch CPU =================
 pub fn getCPU() ![]const u8 {
     return switch (getKernelType()) {
@@ -392,7 +415,9 @@ fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
         "Rectangle",
     };
 
-    for (wm_commands) |cmd| {
+    for (std.meta.enumerate(wm_commands)) |item| {
+        const i = item.index;
+        const cmd = item.value;
         const result = try std.ChildProcess.exec(.{
             .allocator = allocator,
             .argv = &[_][]const u8{ "sh", "-c", cmd },
@@ -403,7 +428,7 @@ fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
         }
 
         if (result.term.Exited == 0) {
-            return try std.fmt.allocPrint(allocator, "WM: {s}", .{cmd});
+            return try std.fmt.allocPrint(allocator, "WM: {s}", .{wm_names[i]});
         }
     }
 
