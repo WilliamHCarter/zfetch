@@ -135,11 +135,35 @@ pub fn getHostDevice() ![]const u8 {
     return switch (getKernelType()) {
         .Linux => linuxDevice(),
         .Darwin => darwinDevice(),
-        else => return error.UnknownModel,
+        else => return error.UnknownDevice,
     };
 }
 
 fn linuxDevice() ![]const u8 {
+    // Check for DMI information
+    const board_vendor = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
+    const board_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
+    if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
+        return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ board_vendor, board_name });
+    }
+
+    const product_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
+    const product_version = std.fs.file.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
+    if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
+        return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ product_name, product_version });
+    }
+    // Check for firmware model
+    const firmware_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
+    if (!std.mem.eql(u8, firmware_model, "Unknown")) {
+        return firmware_model;
+    }
+
+    // Check for temporary model information
+    const tmp_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/tmp/sysinfo/model") catch "Unknown";
+    if (!std.mem.eql(u8, tmp_model, "Unknown")) {
+        return tmp_model;
+    }
+
     return "Unknown";
 }
 
