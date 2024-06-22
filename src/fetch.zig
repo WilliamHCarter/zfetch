@@ -141,40 +141,67 @@ pub fn getHostDevice() ![]const u8 {
 
 fn linuxDevice() ![]const u8 {
     // Check for DMI information
-    const board_vendor = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
-    const board_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
-    if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
-        return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ board_vendor, board_name });
-    }
+    // const board_vendor = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
+    // const board_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
+    // if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
+    //     return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ board_vendor, board_name });
+    // }
 
-    const product_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
-    const product_version = std.fs.file.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
-    if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
-        return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ product_name, product_version });
-    }
-    // Check for firmware model
-    const firmware_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
-    if (!std.mem.eql(u8, firmware_model, "Unknown")) {
-        return firmware_model;
-    }
+    // const product_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
+    // const product_version = std.fs.file.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
+    // if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
+    //     return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ product_name, product_version });
+    // }
+    // // Check for firmware model
+    // const firmware_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
+    // if (!std.mem.eql(u8, firmware_model, "Unknown")) {
+    //     return firmware_model;
+    // }
 
-    // Check for temporary model information
-    const tmp_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/tmp/sysinfo/model") catch "Unknown";
-    if (!std.mem.eql(u8, tmp_model, "Unknown")) {
-        return tmp_model;
-    }
+    // // Check for temporary model information
+    // const tmp_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/tmp/sysinfo/model") catch "Unknown";
+    // if (!std.mem.eql(u8, tmp_model, "Unknown")) {
+    //     return tmp_model;
+    // }
 
     return "Unknown";
 }
 
 fn darwinDevice() ![]const u8 {
-    const kextstat_output = try execCommand(std.heap.page_allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
+    const kextstat_output: []const u8 = execCommand(std.heap.page_allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
     if (std.mem.indexOf(u8, kextstat_output, "FakeSMC") != null or std.mem.indexOf(u8, kextstat_output, "VirtualSMC") != null) {
-        const hw_model = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+        const hw_model = execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
         return std.fmt.allocPrint(std.heap.page_allocator, "Hackintosh (SMBIOS: {s})", .{hw_model});
     } else {
-        return try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+        return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
     }
+}
+
+//================= Fetch Kernel =================
+pub fn getKernel() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxKernel(),
+        .Darwin => darwinKernel(),
+        .BSD => bsdKernel(),
+        .Windows => windowsKernel(),
+        .Unknown => return error.UnknownKernel,
+    };
+}
+
+fn linuxKernel() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+}
+
+fn darwinKernel() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+}
+
+fn bsdKernel() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+}
+
+fn windowsKernel() ![]const u8 {
+    return "TODO";
 }
 
 //================= Fetch CPU =================
@@ -255,7 +282,15 @@ fn linuxUptime() ![]const u8 {
 }
 
 fn darwinUptime() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{"uptime"}, "Unknown");
+    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{"uptime"}, "Unknown");
+    const start_keyword = " up ";
+    const end_keyword = " mins,";
+
+    const start = (std.mem.indexOf(u8, output, start_keyword) orelse return error.UptimeNotFound) + start_keyword.len;
+    const end = std.mem.indexOf(u8, output[start..], end_keyword) orelse return error.UptimeNotFound;
+
+    const uptime = output[start .. start + end + end_keyword.len - 1];
+    return uptime;
 }
 
 fn bsdUptime() ![]const u8 {
@@ -409,7 +444,7 @@ fn windowsDE() ![]const u8 {
 pub fn getWM() ![]const u8 {
     return switch (getKernelType()) {
         .Linux => linuxWM(),
-        .Darwin => darwinWM(),
+        .Darwin => darwinWM(std.heap.page_allocator),
         .BSD => bsdWM(),
         .Windows => windowsWM(),
         .Unknown => return error.UnknownWM,
@@ -439,24 +474,19 @@ fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
         "Rectangle",
     };
 
-    for (std.meta.enumerate(wm_commands)) |item| {
-        const i = item.index;
-        const cmd = item.value;
-        const result = try std.ChildProcess.exec(.{
-            .allocator = allocator,
-            .argv = &[_][]const u8{ "sh", "-c", cmd },
-        });
-        defer {
-            allocator.free(result.stdout);
-            allocator.free(result.stderr);
+    var i: usize = 0;
+    for (wm_commands) |cmd| {
+        const result = try execCommand(allocator, &[_][]const u8{ "sh", "-c", cmd }, "failed");
+        if (std.mem.eql(u8, result, "failed")) {
+            allocator.free(result);
+            i += 1;
+            continue;
         }
-
-        if (result.term.Exited == 0) {
-            return try std.fmt.allocPrint(allocator, "WM: {s}", .{wm_names[i]});
-        }
+        allocator.free(result);
+        return try std.fmt.allocPrint(allocator, "{s}", .{wm_names[i]});
     }
 
-    return "WM: Quartz Compositor";
+    return "Quartz Compositor";
 }
 
 fn bsdWM() ![]const u8 {
@@ -491,6 +521,37 @@ fn bsdTheme() ![]const u8 {
 }
 
 fn windowsTheme() ![]const u8 {
+    return "TODO";
+}
+
+//================= Fetch GPU =================
+pub fn getGPU() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxGPU(),
+        .Darwin => darwinGPU(),
+        .BSD => bsdGPU(),
+        .Windows => windowsGPU(),
+        .Unknown => return error.UnknownGPU,
+    };
+}
+
+fn linuxGPU() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
+}
+
+fn darwinGPU() ![]const u8 {
+    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
+    const start = (std.mem.indexOf(u8, output, "Chipset Model: ") orelse return error.ResolutionNotFound) + "Chipset Model: ".len;
+    const end = std.mem.indexOf(u8, output[start..], "\n") orelse return error.ResolutionNotFound;
+    const GPU = output[start .. start + end];
+    return GPU;
+}
+
+fn bsdGPU() ![]const u8 {
+    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
+}
+
+fn windowsGPU() ![]const u8 {
     return "TODO";
 }
 
