@@ -284,12 +284,12 @@ fn linuxUptime() ![]const u8 {
 fn darwinUptime() ![]const u8 {
     const output = try execCommand(std.heap.page_allocator, &[_][]const u8{"uptime"}, "Unknown");
     const start_keyword = " up ";
-    const end_keyword = " mins,";
+    const end_keyword = ", ";
 
     const start = (std.mem.indexOf(u8, output, start_keyword) orelse return error.UptimeNotFound) + start_keyword.len;
     const end = std.mem.indexOf(u8, output[start..], end_keyword) orelse return error.UptimeNotFound;
+    const uptime = output[start .. start + end];
 
-    const uptime = output[start .. start + end + end_keyword.len - 1];
     return uptime;
 }
 

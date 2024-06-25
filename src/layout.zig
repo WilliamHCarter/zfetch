@@ -1,4 +1,116 @@
+//==================================================================================================
+// File:       layout.zig
+// Contents:   System for rendering fetched info based on theme file preferences.
+// Author:     Will Carter
+//==================================================================================================
 const std = @import("std");
+const fetch = @import("fetch.zig");
+
+//=========================== Data Structures ===========================
+pub const Component = struct {
+    kind: ComponentKind,
+    properties: std.StringHashMap([]const u8),
+
+    fn init(kind: ComponentKind) Component {
+        return .{
+            .kind = kind,
+            .properties = std.StringHashMap([]const u8).init(std.heap.page_allocator),
+        };
+    }
+
+    fn deinit(self: *Component) void {
+        self.properties.deinit();
+    }
+};
+
+const ComponentKind = enum {
+    Username,
+};
+
+const Theme = struct {
+    name: []const u8,
+    components: std.ArrayList(Component),
+
+    fn init(name: []const u8) Theme {
+        return .{
+            .name = name,
+            .components = std.ArrayList(Component).init(std.heap.page_allocator),
+        };
+    }
+
+    fn deinit(self: *Theme) void {
+        for (self.components.items) |*component| {
+            component.deinit();
+        }
+        self.components.deinit();
+    }
+};
+
+//=========================== Parsing ===========================
+
+pub fn loadTheme(name: []const u8) !Theme {
+    const path = try std.fmt.allocPrint(std.heap.page_allocator, "themes/{s}.theme", .{name});
+    defer std.heap.page_allocator.free(path);
+
+    const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
+    defer std.heap.page_allocator.free(content);
+
+    return parseTheme(content);
+}
+
+fn parseTheme(content: []const u8) !Theme {
+    var theme = Theme.init("parsed_theme");
+    var lines = std.mem.split(u8, content, "\n");
+
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t");
+        if (trimmed.len == 0) continue;
+
+        if (std.mem.startsWith(u8, trimmed, "<") and std.mem.endsWith(u8, trimmed, ">")) {
+            const component = try parseComponent(trimmed[1 .. trimmed.len - 1]);
+            try theme.components.append(component);
+        }
+    }
+
+    return theme;
+}
+
+fn parseComponent(component_str: []const u8) !Component {
+    var parts = std.mem.split(u8, component_str, " ");
+    const kind_str = parts.next() orelse return error.InvalidComponent;
+    const kind = std.meta.stringToEnum(ComponentKind, kind_str) orelse return error.UnknownComponentKind;
+
+    var component = Component.init(kind);
+
+    while (parts.next()) |part| {
+        var kv = std.mem.split(u8, part, "=");
+        const key = kv.next() orelse continue;
+        const value = kv.next() orelse continue;
+        try component.properties.put(key, value);
+    }
+
+    return component;
+}
+
+//=========================== Rendering ===========================
+pub fn render(theme: Theme) !void {
+    for (theme.components.items) |component| {
+        try renderComponent(component);
+    }
+}
+
+fn renderComponent(component: Component) !void {
+    switch (component.kind) {
+        .Username => try renderUsername(),
+    }
+}
+
+fn renderUsername() !void {
+    const username = try fetch.getUsername();
+    std.debug.print("User: {s}\n", .{username});
+}
+
+//=========================== Memory Size Formatting ==============================================
 
 pub fn displayInfo(writer: anytype, username: []const u8, os: []const u8, cpu: []const u8, memory: []const u8, uptime: []const u8) !void {
     try writer.print("Username: {s}\n", .{username});
