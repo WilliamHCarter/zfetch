@@ -28,6 +28,18 @@ const ComponentKind = enum {
     OS,
     Hostname,
     Kernel,
+    Uptime,
+    Packages,
+    Shell,
+    Terminal,
+    Resolution,
+    DE,
+    WM,
+    Theme,
+    CPU,
+    GPU,
+    Memory,
+    TopBar,
 };
 
 const Theme = struct {
@@ -110,6 +122,18 @@ fn renderComponent(component: Component) !void {
         .OS => try renderOS(),
         .Hostname => try renderHostname(),
         .Kernel => try renderKernel(),
+        .Uptime => try renderUptime(),
+        .Packages => try renderPackages(),
+        .Shell => try renderShell(),
+        .Terminal => try renderTerminal(),
+        .Resolution => try renderResolution(),
+        .DE => try renderDE(),
+        .WM => try renderWM(),
+        .Theme => try renderTheme(),
+        .CPU => try renderCPU(),
+        .GPU => try renderGPU(),
+        .Memory => try renderMemory(),
+        .TopBar => try renderTopBar(),
     }
 }
 
@@ -133,6 +157,64 @@ fn renderKernel() !void {
     std.debug.print("Kernel: {s}\n", .{kernel});
 }
 
+fn renderUptime() !void {
+    const uptime = try fetch.getUptime();
+    std.debug.print("Uptime: {s}\n", .{uptime});
+}
+
+fn renderPackages() !void {
+    const packages = try fetch.getPackages();
+    std.debug.print("Packages: {s}\n", .{packages});
+}
+
+fn renderShell() !void {
+    const shell = try fetch.getShell();
+    std.debug.print("Shell: {s}\n", .{shell});
+}
+
+fn renderTerminal() !void {
+    const terminal = try fetch.getTerminal();
+    std.debug.print("Terminal: {s}\n", .{terminal});
+}
+
+fn renderResolution() !void {
+    const resolution = try fetch.getResolution();
+    std.debug.print("Resolution: {s}\n", .{resolution});
+}
+
+fn renderDE() !void {
+    const de = try fetch.getDE();
+    std.debug.print("DE: {s}\n", .{de});
+}
+
+fn renderWM() !void {
+    const wm = try fetch.getWM();
+    std.debug.print("WM: {s}\n", .{wm});
+}
+
+fn renderTheme() !void {
+    const theme = try fetch.getTheme();
+    std.debug.print("Theme: {s}\n", .{theme});
+}
+
+fn renderCPU() !void {
+    const cpu = try fetch.getCPU();
+    std.debug.print("CPU: {s}\n", .{cpu});
+}
+
+fn renderGPU() !void {
+    const gpu = try fetch.getGPU();
+    std.debug.print("GPU: {s}\n", .{gpu});
+}
+
+fn renderMemory() !void {
+    const memory = try fetch.getMemory();
+    std.debug.print("Memory: {s}\n", .{memory});
+}
+
+fn renderTopBar() !void {
+    std.debug.print("-------------------------------------\n", .{});
+}
 //=========================== Memory Size Formatting ==============================================
 
 pub fn displayInfo(writer: anytype, username: []const u8, os: []const u8, cpu: []const u8, memory: []const u8, uptime: []const u8) !void {
