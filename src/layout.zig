@@ -25,6 +25,9 @@ pub const Component = struct {
 
 const ComponentKind = enum {
     Username,
+    OS,
+    Hostname,
+    Kernel,
 };
 
 const Theme = struct {
@@ -49,7 +52,9 @@ const Theme = struct {
 //=========================== Parsing ===========================
 
 pub fn loadTheme(name: []const u8) !Theme {
-    const path = try std.fmt.allocPrint(std.heap.page_allocator, "themes/{s}.theme", .{name});
+    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
+    const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}", .{ cwd, name });
     defer std.heap.page_allocator.free(path);
 
     const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
@@ -102,12 +107,30 @@ pub fn render(theme: Theme) !void {
 fn renderComponent(component: Component) !void {
     switch (component.kind) {
         .Username => try renderUsername(),
+        .OS => try renderOS(),
+        .Hostname => try renderHostname(),
+        .Kernel => try renderKernel(),
     }
 }
 
 fn renderUsername() !void {
     const username = try fetch.getUsername();
     std.debug.print("User: {s}\n", .{username});
+}
+
+fn renderOS() !void {
+    const os = try fetch.getOS();
+    std.debug.print("OS: {s}\n", .{os});
+}
+
+fn renderHostname() !void {
+    const hostname = try fetch.getHostDevice();
+    std.debug.print("Host: {s}\n", .{hostname});
+}
+
+fn renderKernel() !void {
+    const kernel = try fetch.getKernel();
+    std.debug.print("Kernel: {s}\n", .{kernel});
 }
 
 //=========================== Memory Size Formatting ==============================================

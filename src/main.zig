@@ -36,7 +36,7 @@ pub fn main() !void {
     // try stdout.print("CPU: {s}\n", .{cpu});
     // try stdout.print("GPU: {s}\n", .{gpu});
     // try stdout.print("Memory: {s}\n", .{memory});
-    const theme_name = "default"; // Or get from command line args
-    const theme = try layout.loadTheme(theme_name);
+    const theme_name = "default.txt"; // Or get from command line args
+    const theme = try layout.loadTheme("themes/" ++ theme_name);
     try layout.render(theme);
 }
