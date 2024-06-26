@@ -6,4 +6,6 @@ pub fn main() !void {
     const theme_name = "default.txt";
     const theme = try layout.loadTheme("themes/" ++ theme_name);
     try layout.render(theme);
+    const logo = try fetch.getLogo();
+    std.debug.print("{s}", .{logo});
 }

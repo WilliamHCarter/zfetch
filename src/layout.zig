@@ -5,7 +5,7 @@
 //==================================================================================================
 const std = @import("std");
 const fetch = @import("fetch.zig");
-
+const buf = @import("buffer.zig");
 //=========================== Data Structures ===========================
 pub const Component = struct {
     kind: ComponentKind,
@@ -39,6 +39,7 @@ const ComponentKind = enum {
     CPU,
     GPU,
     Memory,
+    Logo,
     TopBar,
 };
 
@@ -60,7 +61,6 @@ const Theme = struct {
         self.components.deinit();
     }
 };
-
 //=========================== Parsing ===========================
 
 pub fn loadTheme(name: []const u8) !Theme {
@@ -111,110 +111,242 @@ fn parseComponent(component_str: []const u8) !Component {
 
 //=========================== Rendering ===========================
 pub fn render(theme: Theme) !void {
+    var buffer = try buf.Buffer.init(std.heap.page_allocator, 50, 80); // Initial size
+    defer buffer.deinit();
+
+    var logo_component: ?Component = null;
+
     for (theme.components.items) |component| {
-        try renderComponent(component);
+        if (component.kind == .Logo) {
+            logo_component = component;
+            continue;
+        }
+        try renderComponent(&buffer, component);
     }
+
+    if (logo_component) |logo| {
+        try renderLogo(&buffer, logo);
+    }
+
+    const stdout = std.io.getStdOut().writer();
+    try buffer.render(stdout);
 }
 
-fn renderComponent(component: Component) !void {
+fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
     switch (component.kind) {
-        .Username => try renderUsername(),
-        .OS => try renderOS(),
-        .Hostname => try renderHostname(),
-        .Kernel => try renderKernel(),
-        .Uptime => try renderUptime(),
-        .Packages => try renderPackages(),
-        .Shell => try renderShell(),
-        .Terminal => try renderTerminal(),
-        .Resolution => try renderResolution(),
-        .DE => try renderDE(),
-        .WM => try renderWM(),
-        .Theme => try renderTheme(),
-        .CPU => try renderCPU(),
-        .GPU => try renderGPU(),
-        .Memory => try renderMemory(),
-        .TopBar => try renderTopBar(),
+        .Username => try renderUsername(buffer),
+        .OS => try renderOS(buffer),
+        .Hostname => try renderHostname(buffer),
+        .Kernel => try renderKernel(buffer),
+        .Uptime => try renderUptime(buffer),
+        .Packages => try renderPackages(buffer),
+        .Shell => try renderShell(buffer),
+        .Terminal => try renderTerminal(buffer),
+        .Resolution => try renderResolution(buffer),
+        .DE => try renderDE(buffer),
+        .WM => try renderWM(buffer),
+        .Theme => try renderTheme(buffer),
+        .CPU => try renderCPU(buffer),
+        .GPU => try renderGPU(buffer),
+        .Memory => try renderMemory(buffer),
+        .Logo => try renderLogo(buffer, component),
+        .TopBar => try renderTopBar(buffer),
     }
 }
 
-fn renderUsername() !void {
+fn renderUsername(buffer: *buf.Buffer) !void {
     const username = try fetch.getUsername();
-    std.debug.print("User: {s}\n", .{username});
+    try buffer.write(buffer.getCurrentRow(), 0, "User: ");
+    try buffer.write(buffer.getCurrentRow(), 6, username);
+    try buffer.addRow();
 }
 
-fn renderOS() !void {
+fn renderOS(buffer: *buf.Buffer) !void {
     const os = try fetch.getOS();
-    std.debug.print("OS: {s}\n", .{os});
+    try buffer.write(buffer.getCurrentRow(), 0, "OS: ");
+    try buffer.write(buffer.getCurrentRow(), 4, os);
+    try buffer.addRow();
 }
 
-fn renderHostname() !void {
+fn renderHostname(buffer: *buf.Buffer) !void {
     const hostname = try fetch.getHostDevice();
-    std.debug.print("Host: {s}\n", .{hostname});
+    try buffer.write(buffer.getCurrentRow(), 0, "Host: ");
+    try buffer.write(buffer.getCurrentRow(), 6, hostname);
+    try buffer.addRow();
 }
 
-fn renderKernel() !void {
+fn renderKernel(buffer: *buf.Buffer) !void {
     const kernel = try fetch.getKernel();
-    std.debug.print("Kernel: {s}\n", .{kernel});
+    try buffer.write(buffer.getCurrentRow(), 0, "Kernel: ");
+    try buffer.write(buffer.getCurrentRow(), 8, kernel);
+    try buffer.addRow();
 }
 
-fn renderUptime() !void {
+fn renderUptime(buffer: *buf.Buffer) !void {
     const uptime = try fetch.getUptime();
-    std.debug.print("Uptime: {s}\n", .{uptime});
+    try buffer.write(buffer.getCurrentRow(), 0, "Uptime: ");
+    try buffer.write(buffer.getCurrentRow(), 8, uptime);
+    try buffer.addRow();
 }
 
-fn renderPackages() !void {
+fn renderPackages(buffer: *buf.Buffer) !void {
     const packages = try fetch.getPackages();
-    std.debug.print("Packages: {s}\n", .{packages});
+    try buffer.write(buffer.getCurrentRow(), 0, "Packages: ");
+    try buffer.write(buffer.getCurrentRow(), 10, packages);
+    try buffer.addRow();
 }
 
-fn renderShell() !void {
+fn renderShell(buffer: *buf.Buffer) !void {
     const shell = try fetch.getShell();
-    std.debug.print("Shell: {s}\n", .{shell});
+    try buffer.write(buffer.getCurrentRow(), 0, "Shell: ");
+    try buffer.write(buffer.getCurrentRow(), 6, shell);
+    try buffer.addRow();
 }
 
-fn renderTerminal() !void {
+fn renderTerminal(buffer: *buf.Buffer) !void {
     const terminal = try fetch.getTerminal();
-    std.debug.print("Terminal: {s}\n", .{terminal});
+    try buffer.write(buffer.getCurrentRow(), 0, "Terminal: ");
+    try buffer.write(buffer.getCurrentRow(), 9, terminal);
+    try buffer.addRow();
 }
 
-fn renderResolution() !void {
+fn renderResolution(buffer: *buf.Buffer) !void {
     const resolution = try fetch.getResolution();
-    std.debug.print("Resolution: {s}\n", .{resolution});
+    try buffer.write(buffer.getCurrentRow(), 0, "Resolution: ");
+    try buffer.write(buffer.getCurrentRow(), 12, resolution);
+    try buffer.addRow();
 }
 
-fn renderDE() !void {
+fn renderDE(buffer: *buf.Buffer) !void {
     const de = try fetch.getDE();
-    std.debug.print("DE: {s}\n", .{de});
+    try buffer.write(buffer.getCurrentRow(), 0, "DE: ");
+    try buffer.write(buffer.getCurrentRow(), 4, de);
+    try buffer.addRow();
 }
 
-fn renderWM() !void {
+fn renderWM(buffer: *buf.Buffer) !void {
     const wm = try fetch.getWM();
-    std.debug.print("WM: {s}\n", .{wm});
+    try buffer.write(buffer.getCurrentRow(), 0, "WM: ");
+    try buffer.write(buffer.getCurrentRow(), 4, wm);
+    try buffer.addRow();
 }
 
-fn renderTheme() !void {
+fn renderTheme(buffer: *buf.Buffer) !void {
     const theme = try fetch.getTheme();
-    std.debug.print("Theme: {s}\n", .{theme});
+    try buffer.write(buffer.getCurrentRow(), 0, "Theme: ");
+    try buffer.write(buffer.getCurrentRow(), 7, theme);
+    try buffer.addRow();
 }
 
-fn renderCPU() !void {
+fn renderCPU(buffer: *buf.Buffer) !void {
     const cpu = try fetch.getCPU();
-    std.debug.print("CPU: {s}\n", .{cpu});
+    try buffer.write(buffer.getCurrentRow(), 0, "CPU: ");
+    try buffer.write(buffer.getCurrentRow(), 5, cpu);
+    try buffer.addRow();
 }
 
-fn renderGPU() !void {
+fn renderGPU(buffer: *buf.Buffer) !void {
     const gpu = try fetch.getGPU();
-    std.debug.print("GPU: {s}\n", .{gpu});
+    try buffer.write(buffer.getCurrentRow(), 0, "GPU: ");
+    try buffer.write(buffer.getCurrentRow(), 5, gpu);
+    try buffer.addRow();
 }
 
-fn renderMemory() !void {
+fn renderMemory(buffer: *buf.Buffer) !void {
     const memory = try fetch.getMemory();
-    std.debug.print("Memory: {s}\n", .{memory});
+    try buffer.write(buffer.getCurrentRow(), 0, "Memory: ");
+    try buffer.write(buffer.getCurrentRow(), 8, memory);
+    try buffer.addRow();
 }
 
-fn renderTopBar() !void {
-    std.debug.print("-------------------------------------\n", .{});
+const LogoPosition = enum {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    Inline,
+};
+
+fn getMaxWidth(ascii_art: []const u8) usize {
+    var max: usize = 0;
+    var lines = std.mem.split(u8, ascii_art, "\n");
+    while (lines.next()) |line| {
+        max = @max(max, line.len);
+    }
+    return max;
 }
+
+fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
+    //const position = component.properties.get("position") orelse "inline";
+    //const ascii_art = try fetch.getLogo();
+    //const ascii_lines = std.mem.split(u8, ascii_art, "\n");
+    //const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
+    std.debug.print("Buffer: {}\n", .{buffer});
+    std.debug.print("Component: {}\n", .{component});
+    // switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
+    //     .Top => {
+    //         try buffer.shiftRowsDown(0, ascii_height);
+    //         var row: usize = 0;
+    //         while (ascii_lines.next()) |line| {
+    //             try buffer.write(row, 0, line);
+    //             row += 1;
+    //         }
+    //     },
+    //     .Bottom => {
+    //         const start_row = buffer.getCurrentRow();
+    //         var row = start_row;
+    //         while (ascii_lines.next()) |line| {
+    //             try buffer.write(row, 0, line);
+    //             row += 1;
+    //         }
+    //     },
+    //     .Left => {
+    //         const max_width = getMaxWidth(ascii_art);
+    //         var row: usize = 0;
+    //         while (ascii_lines.next()) |line| {
+    //             if (row >= buffer.getCurrentRow()) {
+    //                 try buffer.addRow();
+    //             }
+    //             try buffer.write(row, 0, line);
+    //             row += 1;
+    //         }
+    //         const tempBuffer = try std.heap.GeneralPurposeAllocator(u8).alloc(max_width + 1);
+    //         defer tempBuffer.dealloc();
+    //         for (buffer.lines.items[0..buffer.getCurrentRow()]) |*line| {
+    //             const lineLen = line.len;
+    //             const shiftAmount = lineLen - max_width - 1;
+    //             std.mem.copy(tempBuffer.ptr, line[shiftAmount..lineLen]);
+    //             std.mem.copy(line[max_width + 1 .. lineLen], tempBuffer.ptr);
+    //             @memset(line[0 .. max_width + 1], ' ');
+    //         }
+    //     },
+    //     .Right => {
+    //         var row: usize = 0;
+    //         while (ascii_lines.next()) |line| {
+    //             if (row >= buffer.getCurrentRow()) {
+    //                 try buffer.addRow();
+    //             }
+    //             try buffer.write(row, buffer.width - line.len, line);
+    //             row += 1;
+    //         }
+    //     },
+    //     .Inline => {
+    //         const start_row = buffer.getCurrentRow();
+    //         var row = start_row;
+    //         while (ascii_lines.next()) |line| {
+    //             try buffer.write(row, 0, line);
+    //             row += 1;
+    //         }
+    //     },
+    // }
+}
+
+fn renderTopBar(buffer: *buf.Buffer) !void {
+    const top_bar = "-------------------------------------";
+    try buffer.write(buffer.getCurrentRow(), 0, top_bar);
+    try buffer.addRow();
+}
+
 //=========================== Memory Size Formatting ==============================================
 
 pub fn displayInfo(writer: anytype, username: []const u8, os: []const u8, cpu: []const u8, memory: []const u8, uptime: []const u8) !void {

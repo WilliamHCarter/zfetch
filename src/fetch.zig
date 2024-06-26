@@ -555,6 +555,49 @@ fn windowsGPU() ![]const u8 {
     return "TODO";
 }
 
+//================= Fetch Logo =================
+pub fn getLogo() ![]const u8 {
+    return switch (getKernelType()) {
+        .Linux => linuxLogo(),
+        .Darwin => darwinLogo(),
+        .BSD => bsdLogo(),
+        .Windows => windowsLogo(),
+        .Unknown => return error.UnknownLogo,
+    };
+}
+
+fn linuxLogo() ![]const u8 {
+    // const os_name = execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
+    //     std.debug.print("Error executing command: {}\n", .{err});
+    //     return "Unknown Linux Distro";
+    // };
+    // var os_name_lower = try std.heap.page_allocator.alloc(u8, os_name.len);
+    // var idx: usize = 0;
+    // for (os_name) |char| {
+    //     os_name_lower[idx] = std.ascii.toLower(char);
+    //     idx += 1;
+    // }
+    // return os_name_lower;
+    return "Linux TODO";
+}
+
+fn darwinLogo() ![]const u8 {
+    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
+    const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/ascii/macos.txt", .{cwd});
+    defer std.heap.page_allocator.free(path);
+    const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
+    return content;
+}
+
+fn bsdLogo() ![]const u8 {
+    return "TODO";
+}
+
+fn windowsLogo() ![]const u8 {
+    return "TODO";
+}
+
 //================= Fetch Functions =================
 
 pub fn getUsername() ![]const u8 {
