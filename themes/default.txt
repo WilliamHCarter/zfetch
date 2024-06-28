@@ -14,3 +14,4 @@
 <CPU>
 <GPU>
 <Memory>
+<Logo Bottom>

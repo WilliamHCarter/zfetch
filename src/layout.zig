@@ -277,68 +277,77 @@ fn getMaxWidth(ascii_art: []const u8) usize {
 }
 
 fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
-    //const position = component.properties.get("position") orelse "inline";
-    //const ascii_art = try fetch.getLogo();
-    //const ascii_lines = std.mem.split(u8, ascii_art, "\n");
-    //const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
-    std.debug.print("Buffer: {}\n", .{buffer});
-    std.debug.print("Component: {}\n", .{component});
-    // switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-    //     .Top => {
-    //         try buffer.shiftRowsDown(0, ascii_height);
-    //         var row: usize = 0;
-    //         while (ascii_lines.next()) |line| {
-    //             try buffer.write(row, 0, line);
-    //             row += 1;
-    //         }
-    //     },
-    //     .Bottom => {
-    //         const start_row = buffer.getCurrentRow();
-    //         var row = start_row;
-    //         while (ascii_lines.next()) |line| {
-    //             try buffer.write(row, 0, line);
-    //             row += 1;
-    //         }
-    //     },
-    //     .Left => {
-    //         const max_width = getMaxWidth(ascii_art);
-    //         var row: usize = 0;
-    //         while (ascii_lines.next()) |line| {
-    //             if (row >= buffer.getCurrentRow()) {
-    //                 try buffer.addRow();
-    //             }
-    //             try buffer.write(row, 0, line);
-    //             row += 1;
-    //         }
-    //         const tempBuffer = try std.heap.GeneralPurposeAllocator(u8).alloc(max_width + 1);
-    //         defer tempBuffer.dealloc();
-    //         for (buffer.lines.items[0..buffer.getCurrentRow()]) |*line| {
-    //             const lineLen = line.len;
-    //             const shiftAmount = lineLen - max_width - 1;
-    //             std.mem.copy(tempBuffer.ptr, line[shiftAmount..lineLen]);
-    //             std.mem.copy(line[max_width + 1 .. lineLen], tempBuffer.ptr);
-    //             @memset(line[0 .. max_width + 1], ' ');
-    //         }
-    //     },
-    //     .Right => {
-    //         var row: usize = 0;
-    //         while (ascii_lines.next()) |line| {
-    //             if (row >= buffer.getCurrentRow()) {
-    //                 try buffer.addRow();
-    //             }
-    //             try buffer.write(row, buffer.width - line.len, line);
-    //             row += 1;
-    //         }
-    //     },
-    //     .Inline => {
-    //         const start_row = buffer.getCurrentRow();
-    //         var row = start_row;
-    //         while (ascii_lines.next()) |line| {
-    //             try buffer.write(row, 0, line);
-    //             row += 1;
-    //         }
-    //     },
-    // }
+    const position = component.properties.get("position") orelse "inline";
+    const ascii_art = try fetch.getLogo();
+    var ascii_lines = std.mem.split(u8, ascii_art, "\n");
+    std.debug.print("ascii_art: {s}\n", .{ascii_art});
+    std.debug.print("ascii_lines: {}\n", .{ascii_lines});
+    const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
+
+    switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
+        .Top => {
+            std.debug.print("Top\n", .{});
+            try buffer.shiftRowsDown(0, ascii_height);
+            var row: usize = 0;
+            while (ascii_lines.next()) |line| {
+                try buffer.write(row, 0, line);
+                row += 1;
+            }
+        },
+        .Bottom => {
+            std.debug.print("Bottom\n", .{});
+            const start_row = buffer.getCurrentRow();
+            var row = start_row;
+            while (ascii_lines.next()) |line| {
+                try buffer.write(row, 0, line);
+                row += 1;
+            }
+        },
+        .Left => {
+            std.debug.print("Left\n", .{});
+            const max_width = getMaxWidth(ascii_art);
+            var row: usize = 0;
+            while (ascii_lines.next()) |line| {
+                if (row >= buffer.getCurrentRow()) {
+                    try buffer.addRow();
+                }
+                try buffer.write(row, 0, line);
+                row += 1;
+            }
+            var tempBuffer = try std.heap.page_allocator.alloc(u8, buffer.width);
+            defer std.heap.page_allocator.free(tempBuffer);
+
+            for (buffer.lines.items[0..buffer.getCurrentRow()], 0..) |line, row_thing| {
+                const lineLen = line.len;
+                if (lineLen <= max_width + 1) continue;
+                const shiftAmount = lineLen - max_width - 1;
+
+                @memcpy(tempBuffer[0 .. lineLen - shiftAmount], line[shiftAmount..]);
+                @memcpy(buffer.lines.items[row_thing][max_width + 1 ..], tempBuffer[0 .. lineLen - max_width - 1]);
+                @memset(buffer.lines.items[row_thing][0 .. max_width + 1], ' ');
+            }
+        },
+        .Right => {
+            std.debug.print("Right\n", .{});
+            var row: usize = 0;
+            while (ascii_lines.next()) |line| {
+                if (row >= buffer.getCurrentRow()) {
+                    try buffer.addRow();
+                }
+                try buffer.write(row, buffer.width - line.len, line);
+                row += 1;
+            }
+        },
+        .Inline => {
+            std.debug.print("Inline\n", .{});
+            const start_row = buffer.getCurrentRow();
+            var row = start_row;
+            while (ascii_lines.next()) |line| {
+                try buffer.write(row, 0, line);
+                row += 1;
+            }
+        },
+    }
 }
 
 fn renderTopBar(buffer: *buf.Buffer) !void {
