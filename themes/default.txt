@@ -14,4 +14,4 @@
 <CPU>
 <GPU>
 <Memory>
-<Logo Bottom>
+<Logo position=inline>

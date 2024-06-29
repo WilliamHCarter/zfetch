@@ -100,10 +100,12 @@ fn parseComponent(component_str: []const u8) !Component {
     var component = Component.init(kind);
 
     while (parts.next()) |part| {
+        std.debug.print("component and  part:{s} .. {s}\n", .{ component_str, part });
         var kv = std.mem.split(u8, part, "=");
         const key = kv.next() orelse continue;
         const value = kv.next() orelse continue;
         try component.properties.put(key, value);
+        std.debug.print("key and value:{s} .. {s}\n", .{ key, value });
     }
 
     return component;
@@ -280,10 +282,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
     const position = component.properties.get("position") orelse "inline";
     const ascii_art = try fetch.getLogo();
     var ascii_lines = std.mem.split(u8, ascii_art, "\n");
-    std.debug.print("ascii_art: {s}\n", .{ascii_art});
-    std.debug.print("ascii_lines: {}\n", .{ascii_lines});
     const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
-
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top => {
             std.debug.print("Top\n", .{});
@@ -344,6 +343,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
             var row = start_row;
             while (ascii_lines.next()) |line| {
                 try buffer.write(row, 0, line);
+                try buffer.addRow();
                 row += 1;
             }
         },
