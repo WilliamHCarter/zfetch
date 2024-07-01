@@ -67,12 +67,10 @@ pub fn loadTheme(name: []const u8) !Theme {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
     const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}", .{ cwd, name });
-    defer std.heap.page_allocator.free(path);
 
     const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
-    defer std.heap.page_allocator.free(content);
-
-    return parseTheme(content);
+    const theme = try parseTheme(content);
+    return theme;
 }
 
 fn parseTheme(content: []const u8) !Theme {
@@ -100,12 +98,10 @@ fn parseComponent(component_str: []const u8) !Component {
     var component = Component.init(kind);
 
     while (parts.next()) |part| {
-        std.debug.print("component and  part:{s} .. {s}\n", .{ component_str, part });
         var kv = std.mem.split(u8, part, "=");
         const key = kv.next() orelse continue;
         const value = kv.next() orelse continue;
         try component.properties.put(key, value);
-        std.debug.print("key and value:{s} .. {s}\n", .{ key, value });
     }
 
     return component;
@@ -115,19 +111,18 @@ fn parseComponent(component_str: []const u8) !Component {
 pub fn render(theme: Theme) !void {
     var buffer = try buf.Buffer.init(std.heap.page_allocator, 50, 80); // Initial size
     defer buffer.deinit();
-
-    var logo_component: ?Component = null;
+    var logo: ?Component = undefined;
 
     for (theme.components.items) |component| {
-        if (component.kind == .Logo) {
-            logo_component = component;
-            continue;
+        if (component.kind == .Logo) { //Defer logo last to position correctly
+            logo = component;
+        } else {
+            try renderComponent(&buffer, component);
         }
-        try renderComponent(&buffer, component);
     }
 
-    if (logo_component) |logo| {
-        try renderLogo(&buffer, logo);
+    if (logo != null) {
+        try renderComponent(&buffer, logo.?);
     }
 
     const stdout = std.io.getStdOut().writer();
@@ -285,7 +280,6 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
     const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top => {
-            std.debug.print("Top\n", .{});
             try buffer.shiftRowsDown(0, ascii_height);
             var row: usize = 0;
             while (ascii_lines.next()) |line| {
@@ -294,12 +288,12 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
             }
         },
         .Bottom => {
-            std.debug.print("Bottom\n", .{});
             const start_row = buffer.getCurrentRow();
             var row = start_row;
             while (ascii_lines.next()) |line| {
                 try buffer.write(row, 0, line);
                 row += 1;
+                try buffer.addRow();
             }
         },
         .Left => {
@@ -319,7 +313,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
             for (buffer.lines.items[0..buffer.getCurrentRow()], 0..) |line, row_thing| {
                 const lineLen = line.len;
                 if (lineLen <= max_width + 1) continue;
-                const shiftAmount = lineLen - max_width - 1;
+                const shiftAmount = max_width + 1;
 
                 @memcpy(tempBuffer[0 .. lineLen - shiftAmount], line[shiftAmount..]);
                 @memcpy(buffer.lines.items[row_thing][max_width + 1 ..], tempBuffer[0 .. lineLen - max_width - 1]);
@@ -327,13 +321,14 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
             }
         },
         .Right => {
-            std.debug.print("Right\n", .{});
             var row: usize = 0;
+            const logo_width = getMaxWidth(ascii_art);
+            const start_column = buffer.width - logo_width;
             while (ascii_lines.next()) |line| {
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();
                 }
-                try buffer.write(row, buffer.width - line.len, line);
+                try buffer.write(row, start_column, line);
                 row += 1;
             }
         },

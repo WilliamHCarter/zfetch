@@ -4,6 +4,7 @@
 <Hostname>
 <Kernel>
 <Uptime>
+<Logo position=Left>
 <Packages>
 <Shell>
 <Terminal>
@@ -14,4 +15,3 @@
 <CPU>
 <GPU>
 <Memory>
-<Logo position=inline>
