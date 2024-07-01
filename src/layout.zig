@@ -109,6 +109,7 @@ fn parseComponent(component_str: []const u8) !Component {
 
 //=========================== Rendering ===========================
 pub fn render(theme: Theme) !void {
+    const start_time = std.time.milliTimestamp();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const err = gpa.deinit();
@@ -119,18 +120,46 @@ pub fn render(theme: Theme) !void {
     var buffer = try buf.Buffer.init(allocator, 50, 80); // Initial size
     defer buffer.deinit();
 
+    var first_component_time: i128 = 0;
+    var last_component_end_time: i128 = 0;
+    var timer_idx: i128 = 0;
+
     var logo: ?Component = undefined;
     for (theme.components.items) |component| {
+        if (timer_idx == 0) {
+            first_component_time = std.time.milliTimestamp();
+        }
+        const component_start_time = std.time.milliTimestamp();
         if (component.kind == .Logo) { //Defer logo last to position correctly
             logo = component;
         } else {
             try renderComponent(&buffer, component);
         }
+
+        const component_end_time = std.time.milliTimestamp();
+        std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
+        last_component_end_time = component_end_time;
+        timer_idx += 1;
     }
 
     if (logo != null) {
+        const logo_start_time = std.time.milliTimestamp();
         try renderComponent(&buffer, logo.?);
+        const logo_end_time = std.time.milliTimestamp();
+
+        std.debug.print("Logo component rendered in {} ns\n", .{logo_end_time - logo_start_time});
+        last_component_end_time = logo_end_time;
     }
+
+    const render_end_time = std.time.milliTimestamp();
+    const total_render_time = render_end_time - start_time;
+    const time_to_first_component = first_component_time - start_time;
+    const time_after_last_component = render_end_time - last_component_end_time;
+
+    std.debug.print("Time to first component: {} ns\n", .{time_to_first_component});
+    std.debug.print("Time to render all components: {} ns\n", .{last_component_end_time - first_component_time});
+    std.debug.print("Time after last component to finish: {} ns\n", .{time_after_last_component});
+    std.debug.print("Total render time: {} ns\n", .{total_render_time});
 
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
