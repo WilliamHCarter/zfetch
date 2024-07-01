@@ -45,6 +45,27 @@ pub const Buffer = struct {
         @memcpy(line[col..end], text[0 .. end - col]);
     }
 
+    pub fn insert(self: *Buffer, row: usize, col: usize, text: []const u8) void {
+        if (row < self.lines.items.len) {
+            const line = self.lines.items[row];
+            const end = @min(col + text.len, line.len);
+            @memcpy(line[col..end], text[0 .. end - col]);
+        }
+    }
+
+    pub fn insertLeft(self: *Buffer, row: usize, text: []const u8) void {
+        if (row < self.lines.items.len) {
+            const old_line = self.lines.items[row];
+            const new_line = self.allocator.alloc(u8, self.width) catch return;
+            @memset(new_line, ' ');
+            const end = @min(text.len, new_line.len);
+            @memcpy(new_line[0..end], text[0..end]);
+            @memcpy(new_line[end..], old_line[0 .. new_line.len - end]);
+            self.allocator.free(old_line);
+            self.lines.items[row] = new_line;
+        }
+    }
+
     pub fn getCurrentRow(self: *const Buffer) usize {
         return self.row_count;
     }

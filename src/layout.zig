@@ -276,6 +276,7 @@ fn getMaxWidth(ascii_art: []const u8) usize {
 fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
     const position = component.properties.get("position") orelse "inline";
     const ascii_art = try fetch.getLogo();
+    const logo_width = getMaxWidth(ascii_art);
     var ascii_lines = std.mem.split(u8, ascii_art, "\n");
     const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
@@ -297,32 +298,20 @@ fn renderLogo(buffer: *buf.Buffer, component: Component) !void {
             }
         },
         .Left => {
-            std.debug.print("Left\n", .{});
-            const max_width = getMaxWidth(ascii_art);
             var row: usize = 0;
-            while (ascii_lines.next()) |line| {
+            while (ascii_lines.next()) |line_itr| {
+                var curr_line = try std.heap.page_allocator.alloc(u8, logo_width + 3);
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();
                 }
-                try buffer.write(row, 0, line);
+                @memset(curr_line, ' ');
+                @memcpy(curr_line[0..line_itr.len], line_itr);
+                buffer.insertLeft(row, curr_line);
                 row += 1;
-            }
-            var tempBuffer = try std.heap.page_allocator.alloc(u8, buffer.width);
-            defer std.heap.page_allocator.free(tempBuffer);
-
-            for (buffer.lines.items[0..buffer.getCurrentRow()], 0..) |line, row_thing| {
-                const lineLen = line.len;
-                if (lineLen <= max_width + 1) continue;
-                const shiftAmount = max_width + 1;
-
-                @memcpy(tempBuffer[0 .. lineLen - shiftAmount], line[shiftAmount..]);
-                @memcpy(buffer.lines.items[row_thing][max_width + 1 ..], tempBuffer[0 .. lineLen - max_width - 1]);
-                @memset(buffer.lines.items[row_thing][0 .. max_width + 1], ' ');
             }
         },
         .Right => {
             var row: usize = 0;
-            const logo_width = getMaxWidth(ascii_art);
             const start_column = buffer.width - logo_width;
             while (ascii_lines.next()) |line| {
                 if (row >= buffer.getCurrentRow()) {
