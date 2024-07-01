@@ -9,8 +9,8 @@ const builtin = @import("builtin");
 const info = @import("info.zig");
 
 //================= Helper Functions =================
-pub fn fetchEnvVar(key: []const u8) []const u8 {
-    return std.process.getEnvVarOwned(std.heap.page_allocator, key) catch "Unknown";
+pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
+    return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
 }
 
 pub fn toFixedFloat(value: []const u8, precision: u32) []const u8 {
@@ -64,14 +64,20 @@ pub fn getKernelType() KernelType {
 }
 
 //================= Fetch OS =================
-pub fn getOS() ![]const u8 {
-    return switch (getKernelType()) {
+pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
         .Linux => linuxOS(),
-        .Darwin => darwinOS(),
-        .BSD => bsdOS(),
+        .Darwin => darwinOS(arena_allocator),
+        .BSD => bsdOS(arena_allocator),
         .Windows => windowsOS(),
         .Unknown => return error.UnknownOS,
     };
+
+    return allocator.dupe(u8, result);
 }
 
 fn linuxOS() ![]const u8 {
@@ -92,12 +98,12 @@ fn linuxOS() ![]const u8 {
     return "Linux";
 }
 
-fn darwinOS() ![]const u8 {
-    const os_name = execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
+fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
+    const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
         std.debug.print("Error executing command: {}\n", .{err});
         return "Unknown macOS";
     };
-    const os_version = execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productVersion" }, "Unknown") catch |err| {
+    const os_version = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productVersion" }, "Unknown") catch |err| {
         std.debug.print("Error executing command: {}\n", .{err});
         return "Unknown version";
     };
@@ -105,11 +111,11 @@ fn darwinOS() ![]const u8 {
         std.debug.print("Error executing command: {}\n", .{err});
         return "";
     };
-    return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version });
+    return try std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version });
 }
 
-fn bsdOS() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
 fn windowsOS() ![]const u8 {
@@ -122,7 +128,7 @@ fn windowsOS() ![]const u8 {
     //     return "Windows";
     // }
 
-    // const os_string = try std.fmt.allocPrint(std.heap.page_allocator, "Windows {d}.{d}", .{
+    // const os_string = try std.fmt.allocPrint(allocator, "Windows {d}.{d}", .{
     //     info.dwMajorVersion,
     //     info.dwMinorVersion,
     // });
@@ -131,35 +137,45 @@ fn windowsOS() ![]const u8 {
 }
 
 //================= Fetch Host Device =================
-pub fn getHostDevice() ![]const u8 {
-    return switch (getKernelType()) {
+pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
         .Linux => linuxDevice(),
-        .Darwin => darwinDevice(),
+        .Darwin => darwinDevice(arena_allocator),
         else => return error.UnknownDevice,
     };
+
+    return allocator.dupe(u8, result);
 }
 
 fn linuxDevice() ![]const u8 {
-    // Check for DMI information
-    // const board_vendor = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
-    // const board_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
+    // var arena = std.heap.ArenaAllocator.init(allocator);
+    // defer arena.deinit();
+    // const arena_allocator = arena.allocator();
+
+    // // Check for DMI information
+    // const board_vendor = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
+    // const board_name = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
     // if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
-    //     return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ board_vendor, board_name });
+    //     return std.fmt.allocPrint(allocator, "{s} {s}", .{ board_vendor, board_name });
     // }
 
-    // const product_name = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
-    // const product_version = std.fs.file.readFileToOwnedString(std.heap.page_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
+    // const product_name = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
+    // const product_version = std.fs.file.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
     // if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
-    //     return std.fmt.allocPrint(std.heap.page_allocator, "{s} {s}", .{ product_name, product_version });
+    //     return std.fmt.allocPrint(arena_allocator, "{s} {s}", .{ product_name, product_version });
     // }
     // // Check for firmware model
-    // const firmware_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
+    // const firmware_model = std.fs.readFileToOwnedString(arena_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
     // if (!std.mem.eql(u8, firmware_model, "Unknown")) {
     //     return firmware_model;
     // }
 
     // // Check for temporary model information
-    // const tmp_model = std.fs.readFileToOwnedString(std.heap.page_allocator, "/tmp/sysinfo/model") catch "Unknown";
+    // const tmp_model = std.fs.readFileToOwnedString(arena_allocator, "/tmp/sysinfo/model") catch "Unknown";
     // if (!std.mem.eql(u8, tmp_model, "Unknown")) {
     //     return tmp_model;
     // }
@@ -167,37 +183,42 @@ fn linuxDevice() ![]const u8 {
     return "Unknown";
 }
 
-fn darwinDevice() ![]const u8 {
-    const kextstat_output: []const u8 = execCommand(std.heap.page_allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
+fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
+    const kextstat_output: []const u8 = execCommand(allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
     if (std.mem.indexOf(u8, kextstat_output, "FakeSMC") != null or std.mem.indexOf(u8, kextstat_output, "VirtualSMC") != null) {
-        const hw_model = execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
-        return std.fmt.allocPrint(std.heap.page_allocator, "Hackintosh (SMBIOS: {s})", .{hw_model});
+        const hw_model = execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+        return std.fmt.allocPrint(allocator, "Hackintosh (SMBIOS: {s})", .{hw_model});
     } else {
-        return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
+        return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
     }
 }
 
 //================= Fetch Kernel =================
-pub fn getKernel() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxKernel(),
-        .Darwin => darwinKernel(),
-        .BSD => bsdKernel(),
+pub fn getKernel(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    const result = try switch (getKernelType()) {
+        .Linux => linuxKernel(arena_allocator),
+        .Darwin => darwinKernel(arena_allocator),
+        .BSD => bsdKernel(arena_allocator),
         .Windows => windowsKernel(),
         .Unknown => return error.UnknownKernel,
     };
+
+    return try allocator.dupe(u8, result);
 }
 
-fn linuxKernel() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+fn linuxKernel(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
-fn darwinKernel() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+fn darwinKernel(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
-fn bsdKernel() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
 fn windowsKernel() ![]const u8 {
@@ -205,26 +226,32 @@ fn windowsKernel() ![]const u8 {
 }
 
 //================= Fetch CPU =================
-pub fn getCPU() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxCPU(),
-        .Darwin => darwinCPU(),
-        .BSD => bsdCPU(),
+pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxCPU(arena_allocator),
+        .Darwin => darwinCPU(arena_allocator),
+        .BSD => bsdCPU(arena_allocator),
         .Windows => windowsCPU(),
         .Unknown => return error.UnknownCPU,
     };
+
+    return allocator.dupe(u8, result);
 }
 
-fn linuxCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lscpu", "-p=cpu" }, "Unknown");
+fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "lscpu", "-p=cpu" }, "Unknown");
 }
 
-fn darwinCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown");
+fn darwinCPU(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown");
 }
 
-fn bsdCPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "Unknown");
+fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "Unknown");
 }
 
 fn windowsCPU() ![]const u8 {
@@ -232,34 +259,40 @@ fn windowsCPU() ![]const u8 {
     // var info: std.os.windows.SYSTEM_INFO = undefined;
     // std.os.windows.kernel32.GetSystemInfo(&info);
 
-    // const cpu_string = try std.fmt.allocPrint(std.heap.page_allocator, "CPU: {d} cores", .{ info.dwNumberOfProcessors });
+    // const cpu_string = try std.fmt.allocPrint(allocator, "CPU: {d} cores", .{ info.dwNumberOfProcessors });
     // return cpu_string;
     return "Unknown";
 }
 
 //================= Fetch Memory =================
-pub fn getMemory() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxMemory(),
-        .Darwin => darwinMemory(),
-        .BSD => bsdMemory(),
+pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxMemory(arena_allocator),
+        .Darwin => darwinMemory(arena_allocator),
+        .BSD => bsdMemory(arena_allocator),
         .Windows => windowsMemory(),
         .Unknown => return error.UnknownMemory,
     };
+
+    return allocator.dupe(u8, result);
 }
 
-fn linuxMemory() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "free", "-h" }, "Unknown");
+fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "free", "-h" }, "Unknown");
 }
 
-fn darwinMemory() ![]const u8 {
-    const mem_size = try execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.memsize" }, "Unknown");
-    const mem_used = try execCommand(std.heap.page_allocator, &[_][]const u8{ "bash", "-c", "vm_stat | grep ' active\\|wired ' | sed 's/\\.//g' | awk '{s+=$NF} END {print s}'" }, "Unknown");
-    return std.fmt.allocPrint(std.heap.page_allocator, "{s} / {s}", .{ mem_used, mem_size });
+fn darwinMemory(allocator: std.mem.Allocator) ![]const u8 {
+    const mem_size = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.memsize" }, "Unknown");
+    const mem_used = try execCommand(allocator, &[_][]const u8{ "bash", "-c", "vm_stat | grep ' active\\|wired ' | sed 's/\\.//g' | awk '{s+=$NF} END {print s}'" }, "Unknown");
+    return std.fmt.allocPrint(allocator, "{s} / {s}", .{ mem_used, mem_size });
 }
 
-fn bsdMemory() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "hw.physmem" }, "Unknown");
+fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.physmem" }, "Unknown");
 }
 
 fn windowsMemory() ![]const u8 {
@@ -267,22 +300,28 @@ fn windowsMemory() ![]const u8 {
 }
 
 //================= Fetch Uptime =================
-pub fn getUptime() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxUptime(),
-        .Darwin => darwinUptime(),
-        .BSD => bsdUptime(),
+pub fn getUptime(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxUptime(arena_allocator),
+        .Darwin => darwinUptime(arena_allocator),
+        .BSD => bsdUptime(arena_allocator),
         .Windows => windowsUptime(),
         .Unknown => return error.UnknownUptime,
     };
+
+    return try allocator.dupe(u8, result);
 }
 
-fn linuxUptime() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "uptime", "-p" }, "Unknown");
+fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uptime", "-p" }, "Unknown");
 }
 
-fn darwinUptime() ![]const u8 {
-    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{"uptime"}, "Unknown");
+fn darwinUptime(allocator: std.mem.Allocator) ![]const u8 {
+    const output = try execCommand(allocator, &[_][]const u8{"uptime"}, "Unknown");
     const start_keyword = " up ";
     const end_keyword = ", ";
 
@@ -293,8 +332,8 @@ fn darwinUptime() ![]const u8 {
     return uptime;
 }
 
-fn bsdUptime() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
+fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
 }
 
 fn windowsUptime() ![]const u8 {
@@ -302,26 +341,31 @@ fn windowsUptime() ![]const u8 {
 }
 
 //================= Fetch Packages =================
-pub fn getPackages() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxPackages(),
-        .Darwin => darwinPackages(),
-        .BSD => bsdPackages(),
+pub fn getPackages(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxPackages(arena_allocator),
+        .Darwin => darwinPackages(arena_allocator),
+        .BSD => bsdPackages(arena_allocator),
         .Windows => windowsPackages(),
         .Unknown => return error.UnknownPackages,
     };
+    return try allocator.dupe(u8, result);
 }
 
-fn linuxPackages() ![]const u8 {
-    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "dpkg", "-l" }, "Unknown");
+fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
+    return try execCommand(allocator, &[_][]const u8{ "dpkg", "-l" }, "Unknown");
 }
 
-fn darwinPackages() ![]const u8 {
-    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "/bin/bash", "-c", "brew list | wc -l" }, "Unknown");
+fn darwinPackages(allocator: std.mem.Allocator) ![]const u8 {
+    return try execCommand(allocator, &[_][]const u8{ "/bin/bash", "-c", "brew list | wc -l" }, "Unknown");
 }
 
-fn bsdPackages() ![]const u8 {
-    return try execCommand(std.heap.page_allocator, &[_][]const u8{ "pkg", "info" }, "Unknown");
+fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
+    return try execCommand(allocator, &[_][]const u8{ "pkg", "info" }, "Unknown");
 }
 
 fn windowsPackages() ![]const u8 {
@@ -329,84 +373,89 @@ fn windowsPackages() ![]const u8 {
 }
 
 //================= Fetch Shell =================
-pub fn getShell() ![]const u8 {
+pub fn getShell(allocator: std.mem.Allocator) ![]const u8 {
     return switch (getKernelType()) {
-        .Linux => linuxShell(),
-        .Darwin => darwinShell(),
-        .BSD => bsdShell(),
-        .Windows => windowsShell(),
+        .Linux => linuxShell(allocator),
+        .Darwin => darwinShell(allocator),
+        .BSD => bsdShell(allocator),
+        .Windows => windowsShell(allocator),
         .Unknown => return error.UnknownShell,
     };
 }
 
-fn linuxShell() ![]const u8 {
-    return fetchEnvVar("SHELL");
+fn linuxShell(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "SHELL");
 }
 
-fn darwinShell() ![]const u8 {
-    return fetchEnvVar("SHELL");
+fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "SHELL");
 }
 
-fn bsdShell() ![]const u8 {
-    return fetchEnvVar("SHELL");
+fn bsdShell(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "SHELL");
 }
 
-fn windowsShell() ![]const u8 {
-    return fetchEnvVar("COMSPEC");
+fn windowsShell(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "COMSPEC");
 }
 
 //================= Fetch Terminal =================
-pub fn getTerminal() ![]const u8 {
+pub fn getTerminal(allocator: std.mem.Allocator) ![]const u8 {
     return switch (getKernelType()) {
-        .Linux => linuxTerminal(),
-        .Darwin => darwinTerminal(),
-        .BSD => bsdTerminal(),
-        .Windows => windowsTerminal(),
+        .Linux => linuxTerminal(allocator),
+        .Darwin => darwinTerminal(allocator),
+        .BSD => bsdTerminal(allocator),
+        .Windows => windowsTerminal(allocator),
         .Unknown => return error.UnknownTerminal,
     };
 }
 
-fn linuxTerminal() ![]const u8 {
-    return fetchEnvVar("TERM");
+fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "TERM");
 }
 
-fn darwinTerminal() ![]const u8 {
-    return fetchEnvVar("TERM_PROGRAM");
+fn darwinTerminal(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "TERM_PROGRAM");
 }
 
-fn bsdTerminal() ![]const u8 {
-    return fetchEnvVar("TERM");
+fn bsdTerminal(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "TERM");
 }
 
-fn windowsTerminal() ![]const u8 {
-    return fetchEnvVar("TERM");
+fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "TERM");
 }
 
 //================= Fetch Resolution =================
-pub fn getResolution() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxResolution(),
-        .Darwin => darwinResolution(),
-        .BSD => bsdResolution(),
+pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxResolution(arena_allocator),
+        .Darwin => darwinResolution(arena_allocator),
+        .BSD => bsdResolution(arena_allocator),
         .Windows => windowsResolution(),
         .Unknown => return error.UnknownResolution,
     };
+    return allocator.dupe(u8, result);
 }
 
-fn linuxResolution() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
+fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
 }
 
-fn darwinResolution() ![]const u8 {
-    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
+fn darwinResolution(allocator: std.mem.Allocator) ![]const u8 {
+    const output = try execCommand(allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
     const start = (std.mem.indexOf(u8, output, "Resolution: ") orelse return error.ResolutionNotFound) + "Resolution: ".len;
     const end = std.mem.indexOf(u8, output[start..], "\n") orelse return error.ResolutionNotFound;
     const resolution = output[start .. start + end];
     return resolution;
 }
 
-fn bsdResolution() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
+fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
 }
 
 fn windowsResolution() ![]const u8 {
@@ -414,26 +463,31 @@ fn windowsResolution() ![]const u8 {
 }
 
 //================= Fetch DE/WM =================
-pub fn getDE() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxDE(),
+pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxDE(arena_allocator),
         .Darwin => darwinDE(),
-        .BSD => bsdDE(),
+        .BSD => bsdDE(arena_allocator),
         .Windows => windowsDE(),
         .Unknown => return error.UnknownDE,
     };
+    return allocator.dupe(u8, result);
 }
 
-fn linuxDE() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+fn linuxDE(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
 fn darwinDE() ![]const u8 {
     return "Aqua";
 }
 
-fn bsdDE() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+fn bsdDE(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
 fn windowsDE() ![]const u8 {
@@ -441,18 +495,23 @@ fn windowsDE() ![]const u8 {
 }
 
 //================= Fetch WM =================
-pub fn getWM() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxWM(),
-        .Darwin => darwinWM(std.heap.page_allocator),
-        .BSD => bsdWM(),
+pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxWM(arena_allocator),
+        .Darwin => darwinWM(arena_allocator),
+        .BSD => bsdWM(arena_allocator),
         .Windows => windowsWM(),
         .Unknown => return error.UnknownWM,
     };
+    return allocator.dupe(u8, result);
 }
 
-fn linuxWM() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
 fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
@@ -489,8 +548,8 @@ fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
     return "Quartz Compositor";
 }
 
-fn bsdWM() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
 fn windowsWM() ![]const u8 {
@@ -498,26 +557,32 @@ fn windowsWM() ![]const u8 {
 }
 
 //================= Fetch Theme =================
-pub fn getTheme() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxTheme(),
-        .Darwin => darwinTheme(),
-        .BSD => bsdTheme(),
+pub fn getTheme(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxTheme(arena_allocator),
+        .Darwin => darwinTheme(arena_allocator),
+        .BSD => bsdTheme(arena_allocator),
         .Windows => windowsTheme(),
         .Unknown => return error.UnknownTheme,
     };
+
+    return allocator.dupe(u8, result);
 }
 
-fn linuxTheme() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
 }
 
-fn darwinTheme() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
 }
 
-fn bsdTheme() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
 }
 
 fn windowsTheme() ![]const u8 {
@@ -525,30 +590,36 @@ fn windowsTheme() ![]const u8 {
 }
 
 //================= Fetch GPU =================
-pub fn getGPU() ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxGPU(),
-        .Darwin => darwinGPU(),
-        .BSD => bsdGPU(),
+pub fn getGPU(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxGPU(arena_allocator),
+        .Darwin => darwinGPU(arena_allocator),
+        .BSD => bsdGPU(arena_allocator),
         .Windows => windowsGPU(),
         .Unknown => return error.UnknownGPU,
     };
+
+    return allocator.dupe(u8, result);
 }
 
-fn linuxGPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
+fn linuxGPU(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
 }
 
-fn darwinGPU() ![]const u8 {
-    const output = try execCommand(std.heap.page_allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
+fn darwinGPU(allocator: std.mem.Allocator) ![]const u8 {
+    const output = try execCommand(allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
     const start = (std.mem.indexOf(u8, output, "Chipset Model: ") orelse return error.ResolutionNotFound) + "Chipset Model: ".len;
     const end = std.mem.indexOf(u8, output[start..], "\n") orelse return error.ResolutionNotFound;
     const GPU = output[start .. start + end];
     return GPU;
 }
 
-fn bsdGPU() ![]const u8 {
-    return execCommand(std.heap.page_allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
+fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
 }
 
 fn windowsGPU() ![]const u8 {
@@ -556,22 +627,28 @@ fn windowsGPU() ![]const u8 {
 }
 
 //================= Fetch Logo =================
-pub fn getLogo() ![]const u8 {
-    return switch (getKernelType()) {
+pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
         .Linux => linuxLogo(),
-        .Darwin => darwinLogo(),
+        .Darwin => darwinLogo(arena_allocator),
         .BSD => bsdLogo(),
         .Windows => windowsLogo(),
         .Unknown => return error.UnknownLogo,
     };
+
+    return allocator.dupe(u8, result);
 }
 
 fn linuxLogo() ![]const u8 {
-    // const os_name = execCommand(std.heap.page_allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
+    // const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
     //     std.debug.print("Error executing command: {}\n", .{err});
     //     return "Unknown Linux Distro";
     // };
-    // var os_name_lower = try std.heap.page_allocator.alloc(u8, os_name.len);
+    // var os_name_lower = try allocator.alloc(u8, os_name.len);
     // var idx: usize = 0;
     // for (os_name) |char| {
     //     os_name_lower[idx] = std.ascii.toLower(char);
@@ -581,12 +658,12 @@ fn linuxLogo() ![]const u8 {
     return "Linux TODO";
 }
 
-fn darwinLogo() ![]const u8 {
+fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/ascii/macos.txt", .{cwd});
-    defer std.heap.page_allocator.free(path);
-    const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
+    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/macos.txt", .{cwd});
+    defer allocator.free(path);
+    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
     return content;
 }
 
@@ -600,6 +677,6 @@ fn windowsLogo() ![]const u8 {
 
 //================= Fetch Functions =================
 
-pub fn getUsername() ![]const u8 {
-    return fetchEnvVar("USER");
+pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
+    return fetchEnvVar(allocator, "USER");
 }
