@@ -7,6 +7,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const info = @import("info.zig");
+const fetch = @import("fetch/packages_macos.zig");
 
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
@@ -361,7 +362,7 @@ fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinPackages(allocator: std.mem.Allocator) ![]const u8 {
-    return try execCommand(allocator, &[_][]const u8{ "/bin/bash", "-c", "brew list | wc -l" }, "Unknown");
+    return try fetch.getMacosPackages(allocator);
 }
 
 fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
