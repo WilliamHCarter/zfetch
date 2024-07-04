@@ -7,8 +7,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const info = @import("info.zig");
-const fetch = @import("fetch/packages_macos.zig");
-
+const packages = @import("fetch/packages_macos.zig");
+const host = @import("fetch/host_macos.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -185,13 +185,7 @@ fn linuxDevice() ![]const u8 {
 }
 
 fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
-    const kextstat_output: []const u8 = execCommand(allocator, &[_][]const u8{"kextstat"}, "") catch return "Unknown";
-    if (std.mem.indexOf(u8, kextstat_output, "FakeSMC") != null or std.mem.indexOf(u8, kextstat_output, "VirtualSMC") != null) {
-        const hw_model = execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
-        return std.fmt.allocPrint(allocator, "Hackintosh (SMBIOS: {s})", .{hw_model});
-    } else {
-        return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "") catch return "Unknown";
-    }
+    return host.getHost(allocator);
 }
 
 //================= Fetch Kernel =================
@@ -362,7 +356,7 @@ fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinPackages(allocator: std.mem.Allocator) ![]const u8 {
-    return try fetch.getMacosPackages(allocator);
+    return try packages.getMacosPackages(allocator);
 }
 
 fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
