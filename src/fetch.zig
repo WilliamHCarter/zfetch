@@ -11,6 +11,7 @@ const packages = @import("fetch/packages_macos.zig");
 const host = @import("fetch/host_macos.zig");
 const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
+const wm = @import("fetch/wm_macos.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -508,37 +509,9 @@ fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
-    const wm_commands = &[_][]const u8{
-        "ps -e | grep -q '[S]pectacle'",
-        "ps -e | grep -q '[A]methyst'",
-        "ps -e | grep -q '[k]wm'",
-        "ps -e | grep -q '[c]hun[k]wm'",
-        "ps -e | grep -q '[y]abai'",
-        "ps -e | grep -q '[R]ectangle'",
+    return wm.getMacosWM(allocator) catch {
+        return "Call Failed";
     };
-
-    const wm_names = &[_][]const u8{
-        "Spectacle",
-        "Amethyst",
-        "Kwm",
-        "chunkwm",
-        "yabai",
-        "Rectangle",
-    };
-
-    var i: usize = 0;
-    for (wm_commands) |cmd| {
-        const result = try execCommand(allocator, &[_][]const u8{ "sh", "-c", cmd }, "failed");
-        if (std.mem.eql(u8, result, "failed")) {
-            allocator.free(result);
-            i += 1;
-            continue;
-        }
-        allocator.free(result);
-        return try std.fmt.allocPrint(allocator, "{s}", .{wm_names[i]});
-    }
-
-    return "Quartz Compositor";
 }
 
 fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
