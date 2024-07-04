@@ -9,6 +9,7 @@ const builtin = @import("builtin");
 const info = @import("info.zig");
 const packages = @import("fetch/packages_macos.zig");
 const host = @import("fetch/host_macos.zig");
+const resolution = @import("fetch/resolution_macos.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -442,11 +443,7 @@ fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinResolution(allocator: std.mem.Allocator) ![]const u8 {
-    const output = try execCommand(allocator, &[_][]const u8{ "system_profiler", "SPDisplaysDataType" }, "Unknown");
-    const start = (std.mem.indexOf(u8, output, "Resolution: ") orelse return error.ResolutionNotFound) + "Resolution: ".len;
-    const end = std.mem.indexOf(u8, output[start..], "\n") orelse return error.ResolutionNotFound;
-    const resolution = output[start .. start + end];
-    return resolution;
+    return resolution.getResolution(allocator);
 }
 
 fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
