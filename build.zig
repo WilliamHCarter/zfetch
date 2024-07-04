@@ -10,6 +10,8 @@ pub fn build(b: *std.Build) void {
     // Link CoreGraphics framework
     if (builtin.os.tag == .macos) {
         exe.linkFramework("CoreGraphics");
+        exe.linkFramework("CoreFoundation");
+        exe.linkFramework("IOKit");
     }
 
     b.installArtifact(exe);
