@@ -184,7 +184,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
         .Theme => try renderTheme(buffer, allocator),
         .CPU => try renderCPU(buffer, allocator),
         .GPU => try renderGPU(buffer, allocator),
-        .Memory => try renderMemory(buffer, allocator),
+        .Memory => try renderMemory(component, buffer, allocator),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
         .Colors => try renderColors(buffer, allocator),
@@ -289,13 +289,79 @@ fn renderGPU(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     try buffer.addRow();
 }
 
-fn renderMemory(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const memory = try fetch.getMemory(allocator);
+//=========================== Memory Rendering ===========================
+const MemoryUnit = enum {
+    B,
+    KB,
+    MB,
+    GB,
+    Auto,
+};
+
+fn unitToStr(unit: MemoryUnit) []const u8 {
+    return switch (unit) {
+        .B => "B",
+        .KB => "KiB",
+        .MB => "MiB",
+        .GB => "GiB",
+        .Auto => "B",
+    };
+}
+
+fn toFixedUnit(value: []const u8, unit: MemoryUnit, precision: u32, allocator: std.mem.Allocator) []const u8 {
+    const divisor: f64 = switch (unit) {
+        .B => 1,
+        .KB => 1024,
+        .MB => 1024 * 1024,
+        .GB => 1024 * 1024 * 1024,
+        .Auto => 1,
+    };
+
+    const floatValue: f64 = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch -1.0;
+    var buffer: []u8 = allocator.alloc(u8, 100) catch undefined;
+    const formatted = std.fmt.formatFloat(buffer[0..], (floatValue / divisor), .{ .precision = precision, .mode = .decimal }) catch "-1.0";
+    return formatted;
+}
+
+fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit, precision: u32, allocator: std.mem.Allocator) []const u8 {
+    const used = toFixedUnit(mem_used, unit, precision, allocator);
+    const total = toFixedUnit(mem_total, unit, precision, allocator);
+    return std.fmt.allocPrint(allocator, "{s}{s} / {s}{s}", .{ used, unitToStr(unit), total, unitToStr(unit) }) catch "Rendering Error";
+}
+
+fn renderMemory(component: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
+    var memory = try fetch.getMemory(allocator);
+
+    var it = std.mem.split(u8, memory, " / ");
+    const mem_used = it.next() orelse unreachable;
+    const mem_total = it.next() orelse unreachable;
+    const unit = component.properties.get("unit") orelse "Auto";
+
+    switch (std.meta.stringToEnum(MemoryUnit, unit) orelse .Auto) {
+        .B => memory = toMemoryString(mem_used, mem_total, .B, 2, allocator),
+        .KB => memory = toMemoryString(mem_used, mem_total, .KB, 2, allocator),
+        .MB => memory = toMemoryString(mem_used, mem_total, .MB, 2, allocator),
+        .GB => memory = toMemoryString(mem_used, mem_total, .GB, 2, allocator),
+        .Auto => {
+            const used_value = std.fmt.parseFloat(f64, std.mem.trim(u8, mem_used, "\n")) catch -1.0;
+            const total_value = std.fmt.parseFloat(f64, std.mem.trim(u8, mem_total, "\n")) catch -1.0;
+
+            const used_unit: MemoryUnit = if (used_value < 1024) .B else if (used_value < 1024 * 1024) .KB else if (used_value < 1024 * 1024 * 1024) .MB else .GB;
+
+            const total_unit: MemoryUnit = if (total_value < 1024) .B else if (total_value < 1024 * 1024) .KB else if (total_value < 1024 * 1024 * 1024) .MB else .GB;
+
+            const used = toFixedUnit(mem_used, used_unit, 2, allocator);
+            const total = toFixedUnit(mem_total, total_unit, 2, allocator);
+            memory = std.fmt.allocPrint(allocator, "{s}{s} / {s}{s}", .{ used, unitToStr(used_unit), total, unitToStr(total_unit) }) catch "Rendering Error";
+        },
+    }
+
     try buffer.write(buffer.getCurrentRow(), 0, "Memory: ");
     try buffer.write(buffer.getCurrentRow(), 8, memory);
     try buffer.addRow();
 }
 
+//=========================== Logo Rendering ===========================
 const LogoPosition = enum {
     Top,
     Bottom,
@@ -397,37 +463,4 @@ fn renderTopBar(buffer: *buf.Buffer) !void {
     const top_bar = "-------------------------------------";
     try buffer.write(buffer.getCurrentRow(), 0, top_bar);
     try buffer.addRow();
-}
-
-//=========================== Memory Size Formatting ==============================================
-
-pub fn displayInfo(writer: anytype, username: []const u8, os: []const u8, cpu: []const u8, memory: []const u8, uptime: []const u8) !void {
-    try writer.print("Username: {s}\n", .{username});
-    try writer.print("OS: {s}\n", .{os});
-    try writer.print("CPU: {s}\n", .{cpu});
-    try writer.print("Memory: {s}\n", .{memory});
-    try writer.print("Uptime: {s}\n", .{uptime});
-}
-
-//TODO: Refactor unit display such that memory total and used each have their own units, based on what looks cleanest.
-const MemoryUnit = enum {
-    None,
-    KB,
-    MB,
-    GB,
-};
-
-fn toFixedUnit(value: []const u8, unit: MemoryUnit, precision: u32) []const u8 {
-    const divisor: f64 = switch (unit) {
-        .None => 1,
-        .KB => 1024,
-        .MB => 1024 * 1024,
-        .GB => 1024 * 1024 * 1024,
-    };
-
-    const floatValue: f64 = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch -1.0;
-    var buffer: [100]u8 = undefined;
-    const formatted = std.fmt.formatFloat(buffer[0..], (floatValue / divisor), .{ .precision = precision, .mode = .decimal }) catch "-1.0";
-    std.debug.print("formatted: {s}\n", .{formatted});
-    return formatted;
 }
