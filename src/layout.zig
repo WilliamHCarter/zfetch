@@ -41,6 +41,7 @@ const ComponentKind = enum {
     Memory,
     Logo,
     TopBar,
+    Colors,
 };
 
 const Theme = struct {
@@ -109,7 +110,7 @@ fn parseComponent(component_str: []const u8) !Component {
 
 //=========================== Rendering ===========================
 pub fn render(theme: Theme) !void {
-    const start_time = std.time.milliTimestamp();
+    const start_time = std.time.microTimestamp();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const err = gpa.deinit();
@@ -117,41 +118,39 @@ pub fn render(theme: Theme) !void {
     }
     const allocator = gpa.allocator();
 
-    var buffer = try buf.Buffer.init(allocator, 50, 80); // Initial size
+    var buffer = try buf.Buffer.init(allocator, 50, 80);
     defer buffer.deinit();
-
     var first_component_time: i128 = 0;
     var last_component_end_time: i128 = 0;
     var timer_idx: i128 = 0;
-
     var logo: ?Component = undefined;
     for (theme.components.items) |component| {
         if (timer_idx == 0) {
-            first_component_time = std.time.milliTimestamp();
+            first_component_time = std.time.microTimestamp();
         }
-        const component_start_time = std.time.milliTimestamp();
+        // const component_start_time = std.time.microTimestamp();
         if (component.kind == .Logo) { //Defer logo last to position correctly
             logo = component;
         } else {
             try renderComponent(&buffer, component);
         }
 
-        const component_end_time = std.time.milliTimestamp();
-        std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
+        const component_end_time = std.time.microTimestamp();
+        // std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
         last_component_end_time = component_end_time;
         timer_idx += 1;
     }
 
     if (logo != null) {
-        const logo_start_time = std.time.milliTimestamp();
+        const logo_start_time = std.time.microTimestamp();
         try renderComponent(&buffer, logo.?);
-        const logo_end_time = std.time.milliTimestamp();
+        const logo_end_time = std.time.microTimestamp();
 
         std.debug.print("Logo component rendered in {} ns\n", .{logo_end_time - logo_start_time});
         last_component_end_time = logo_end_time;
     }
 
-    const render_end_time = std.time.milliTimestamp();
+    const render_end_time = std.time.microTimestamp();
     const total_render_time = render_end_time - start_time;
     const time_to_first_component = first_component_time - start_time;
     const time_after_last_component = render_end_time - last_component_end_time;
@@ -188,6 +187,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
         .Memory => try renderMemory(buffer, allocator),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
+        .Colors => try renderColors(buffer, allocator),
     }
 }
 
@@ -349,6 +349,14 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
                 buffer.insertLeft(row, curr_line);
                 row += 1;
             }
+            while (row < buffer.getCurrentRow()) {
+                var blank_width = try std.heap.page_allocator.alloc(u8, logo_width + 3);
+                for (blank_width) |*c| {
+                    c.* = ' ';
+                }
+                buffer.insertLeft(row, blank_width[0..]);
+                row += 1;
+            }
         },
         .Right => {
             var row: usize = 0;
@@ -372,6 +380,17 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
             }
         },
     }
+}
+
+fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
+    const colors = try fetch.getColors(allocator);
+    var color_lines = std.mem.split(u8, colors, "\n");
+    const first_line = color_lines.next() orelse return error.InvalidColorFile;
+    const second_line = color_lines.next() orelse return error.InvalidColorFile;
+    try buffer.write(buffer.getCurrentRow(), 0, first_line);
+    try buffer.addRow();
+    try buffer.write(buffer.getCurrentRow(), 0, second_line);
+    try buffer.addRow();
 }
 
 fn renderTopBar(buffer: *buf.Buffer) !void {

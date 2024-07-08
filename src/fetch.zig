@@ -637,6 +637,54 @@ fn windowsLogo() ![]const u8 {
     return "TODO";
 }
 
+//================= Fetch Colors =================
+pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = try switch (getKernelType()) {
+        .Linux => linuxColors(),
+        .Darwin => darwinColors(arena_allocator),
+        .BSD => bsdColors(),
+        .Windows => windowsColors(),
+        .Unknown => return error.UnknownLogo,
+    };
+
+    return allocator.dupe(u8, result);
+}
+
+fn linuxColors() ![]const u8 {
+    return "TODO";
+}
+
+fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    errdefer result.deinit();
+
+    var i: u8 = 0;
+    while (i < 8) : (i += 1) {
+        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[4{d}m   \x1b[0m", .{i}));
+    }
+
+    try result.append('\n');
+
+    i = 0;
+    while (i < 8) : (i += 1) {
+        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[10{d}m   \x1b[0m", .{i}));
+    }
+
+    return result.toOwnedSlice();
+}
+
+fn bsdColors() ![]const u8 {
+    return "TODO";
+}
+
+fn windowsColors() ![]const u8 {
+    return "TODO";
+}
+
 //================= Fetch Functions =================
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
