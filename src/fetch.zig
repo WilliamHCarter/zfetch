@@ -12,6 +12,7 @@ const host = @import("fetch/host_macos.zig");
 const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
+const os = @import("fetch/os_macos.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -103,18 +104,10 @@ fn linuxOS() ![]const u8 {
 }
 
 fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
-    const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
-        std.debug.print("Error executing command: {}\n", .{err});
-        return "Unknown macOS";
-    };
-    const os_version = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productVersion" }, "Unknown") catch |err| {
-        std.debug.print("Error executing command: {}\n", .{err});
-        return "Unknown version";
-    };
-    const os_version_name = info.darwinVersionName(os_version) catch |err| {
-        std.debug.print("Error executing command: {}\n", .{err});
-        return "";
-    };
+    const os_struct = try os.parseOS(allocator);
+    const os_name = os_struct.name;
+    const os_version_name = os_struct.version;
+    const os_version = os_struct.buildVersion;
     return try std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version });
 }
 
