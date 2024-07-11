@@ -12,7 +12,7 @@ pub fn getHost(allocator: std.mem.Allocator) ![]const u8 {
     return name;
 }
 
-fn sysctlGetString(allocator: std.mem.Allocator, name: [:0]const u8) ![]const u8 {
+pub fn sysctlGetString(allocator: std.mem.Allocator, name: [:0]const u8) ![]const u8 {
     var len: usize = 0;
     _ = c.sysctlbyname(name.ptr, null, &len, null, 0);
     if (len == 0) return error.SysctlFailed;

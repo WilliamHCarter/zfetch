@@ -13,6 +13,7 @@ const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
+const memory = @import("fetch/memory_macos.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -238,7 +239,7 @@ fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinCPU(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown");
+    return host.sysctlGetString(allocator, "machdep.cpu.brand_string");
 }
 
 fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -278,8 +279,8 @@ fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
 
 fn darwinMemory(allocator: std.mem.Allocator) ![]const u8 {
     const mem_size = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.memsize" }, "Unknown");
-    const mem_used = try execCommand(allocator, &[_][]const u8{ "bash", "-c", "vm_stat | grep ' active\\|wired ' | sed 's/\\.//g' | awk '{s+=$NF} END {print s}'" }, "Unknown");
-    return std.fmt.allocPrint(allocator, "{s} / {s}", .{ mem_used, mem_size });
+    const mem_used = try memory.getMachMemoryStats();
+    return std.fmt.allocPrint(allocator, "{d} / {s}", .{ mem_used, mem_size });
 }
 
 fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
@@ -537,7 +538,7 @@ fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+    return execCommand(allocator, &[_][]const u8{ "echo", "$THEME" }, "Unknown");
 }
 
 fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {

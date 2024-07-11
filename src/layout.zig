@@ -128,7 +128,7 @@ pub fn render(theme: Theme) !void {
         if (timer_idx == 0) {
             first_component_time = std.time.microTimestamp();
         }
-        // const component_start_time = std.time.microTimestamp();
+        const component_start_time = std.time.microTimestamp();
         if (component.kind == .Logo) { //Defer logo last to position correctly
             logo = component;
         } else {
@@ -136,7 +136,7 @@ pub fn render(theme: Theme) !void {
         }
 
         const component_end_time = std.time.microTimestamp();
-        // std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
+        std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
         last_component_end_time = component_end_time;
         timer_idx += 1;
     }
