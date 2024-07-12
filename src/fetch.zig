@@ -380,9 +380,49 @@ fn linuxShell(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "SHELL");
-}
+    const shell_path = try std.process.getEnvVarOwned(allocator, "SHELL");
+    defer allocator.free(shell_path);
 
+    const shell_name = std.fs.path.basename(shell_path);
+    var shell_info = std.ArrayList(u8).init(allocator);
+    try shell_info.appendSlice(" ");
+    defer shell_info.deinit();
+
+    try shell_info.appendSlice(shell_name);
+
+    if (std.mem.eql(u8, shell_name, "bash")) {
+        const version = try execCommand(allocator, &.{ shell_path, "-c", "echo $BASH_VERSION" }, "Unknown");
+        defer allocator.free(version);
+        if (std.mem.indexOfScalar(u8, version, '-')) |dash_index| {
+            try shell_info.appendSlice(" ");
+            try shell_info.appendSlice(version[0..dash_index]);
+        } else {
+            try shell_info.appendSlice(" ");
+            try shell_info.appendSlice(version);
+        }
+    } else if (std.mem.eql(u8, shell_name, "zsh")) {
+        const version = try execCommand(allocator, &.{ shell_path, "-c", "echo $ZSH_VERSION" }, "Unknown");
+        defer allocator.free(version);
+        try shell_info.appendSlice(" ");
+        try shell_info.appendSlice(version);
+    } else if (std.mem.startsWith(u8, shell_name, "ksh")) {
+        const version = try execCommand(allocator, &.{ shell_path, "-c", "echo $KSH_VERSION" }, "Unknown");
+        defer allocator.free(version);
+        var trimmed_version = std.mem.trim(u8, version, " KSH");
+        trimmed_version = std.mem.trimLeft(u8, trimmed_version, "version ");
+        try shell_info.appendSlice(" ");
+        try shell_info.appendSlice(trimmed_version);
+    } else {
+        const version = try execCommand(allocator, &.{ shell_path, "--version" }, "Unknown");
+        defer allocator.free(version);
+        if (std.mem.indexOf(u8, version, shell_name)) |name_index| {
+            try shell_info.appendSlice(" ");
+            try shell_info.appendSlice(version[name_index + shell_name.len ..]);
+        }
+    }
+
+    return shell_info.toOwnedSlice();
+}
 fn bsdShell(allocator: std.mem.Allocator) ![]const u8 {
     return fetchEnvVar(allocator, "SHELL");
 }
