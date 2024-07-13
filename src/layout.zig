@@ -236,14 +236,14 @@ fn renderPackages(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
 fn renderShell(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const shell = try fetch.getShell(allocator);
     try buffer.write(buffer.getCurrentRow(), 0, "Shell: ");
-    try buffer.write(buffer.getCurrentRow(), 6, shell);
+    try buffer.write(buffer.getCurrentRow(), 7, shell);
     try buffer.addRow();
 }
 
 fn renderTerminal(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const terminal = try fetch.getTerminal(allocator);
     try buffer.write(buffer.getCurrentRow(), 0, "Terminal: ");
-    try buffer.write(buffer.getCurrentRow(), 9, terminal);
+    try buffer.write(buffer.getCurrentRow(), 10, terminal);
     try buffer.addRow();
 }
 
