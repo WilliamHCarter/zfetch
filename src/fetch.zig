@@ -721,8 +721,12 @@ fn windowsColors() ![]const u8 {
     return "TODO";
 }
 
-//================= Fetch Functions =================
-
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "USER");
+    const username = fetchEnvVar(allocator, "USER");
+    defer allocator.free(username);
+
+    var hostname_buffer: [std.posix.HOST_NAME_MAX]u8 = undefined;
+    const hostname = try std.posix.gethostname(&hostname_buffer);
+
+    return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }

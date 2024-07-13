@@ -193,8 +193,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
 
 fn renderUsername(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const username = try fetch.getUsername(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "User: ");
-    try buffer.write(buffer.getCurrentRow(), 6, username);
+    try buffer.write(buffer.getCurrentRow(), 0, username);
     try buffer.addRow();
 }
 
