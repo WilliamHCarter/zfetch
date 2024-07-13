@@ -308,24 +308,77 @@ pub fn getUptime(allocator: std.mem.Allocator) ![]const u8 {
     return try allocator.dupe(u8, result);
 }
 
+fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
+    const days = uptime_seconds / (24 * 60 * 60);
+    const hours = (uptime_seconds % (24 * 60 * 60)) / (60 * 60);
+    const minutes = (uptime_seconds % (60 * 60)) / 60;
+
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    if (days > 0) {
+        try result.writer().print("{d} day{s}", .{ days, if (days == 1) "" else "s" });
+    }
+
+    if (hours > 0) {
+        if (result.items.len > 0) try result.appendSlice(", ");
+        try result.writer().print("{d} hour{s}", .{ hours, if (hours == 1) "" else "s" });
+    }
+
+    if (minutes > 0 or (days == 0 and hours == 0)) {
+        if (result.items.len > 0) try result.appendSlice(", ");
+        try result.writer().print("{d} min{s}", .{ minutes, if (minutes == 1) "" else "s" });
+    }
+
+    return result.toOwnedSlice();
+}
+
+fn getBootTime(allocator: std.mem.Allocator) !i64 {
+    const output = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
+    defer allocator.free(output);
+
+    var iter = std.mem.split(u8, output, "=");
+    _ = iter.next();
+    const boot_time_str = iter.next() orelse return error.BootTimeNotFound;
+
+    const comma_index = std.mem.indexOf(u8, boot_time_str, ",") orelse return error.InvalidBootTimeFormat;
+    const clean_boot_time_str = std.mem.trim(u8, boot_time_str[0..comma_index], " ");
+
+    return try std.fmt.parseInt(i64, clean_boot_time_str, 10);
+}
+
 fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "uptime", "-p" }, "Unknown");
+    const file = try std.fs.openFileAbsolute("/proc/uptime", .{});
+    defer file.close();
+
+    var buffer: [100]u8 = undefined;
+    const bytes_read = try file.read(&buffer);
+    const content = buffer[0..bytes_read];
+
+    var iter = std.mem.split(u8, content, " ");
+    const uptime_str = iter.next() orelse return error.InvalidUptimeFormat;
+    const uptime_seconds_f64 = try std.fmt.parseFloat(f64, uptime_str);
+    const uptime_seconds: u64 = @intFromFloat(uptime_seconds_f64);
+    const formatted_uptime = try formatUptime(allocator, uptime_seconds);
+    return try allocator.dupe(u8, formatted_uptime);
 }
 
 fn darwinUptime(allocator: std.mem.Allocator) ![]const u8 {
-    const output = try execCommand(allocator, &[_][]const u8{"uptime"}, "Unknown");
-    const start_keyword = " up ";
-    const end_keyword = ", ";
+    const boot_time = try getBootTime(allocator);
+    const current_time = std.time.timestamp();
+    if (current_time < boot_time) return error.InvalidBootTime;
 
-    const start = (std.mem.indexOf(u8, output, start_keyword) orelse return error.UptimeNotFound) + start_keyword.len;
-    const end = std.mem.indexOf(u8, output[start..], end_keyword) orelse return error.UptimeNotFound;
-    const uptime = output[start .. start + end];
-
-    return uptime;
+    const uptime_seconds: u64 = @intCast(current_time - boot_time);
+    return formatUptime(allocator, uptime_seconds);
 }
 
 fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
+    const boot_time = try getBootTime(allocator);
+    const current_time = std.time.timestamp();
+    if (current_time < boot_time) return error.InvalidBootTime;
+    
+    const uptime_seconds: u64 = @intCast(current_time - boot_time);
+    return formatUptime(allocator, uptime_seconds);
 }
 
 fn windowsUptime() ![]const u8 {
