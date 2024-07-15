@@ -46,7 +46,6 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
     const stdout = child.stdout orelse return fallback;
     const result = try stdout.reader().readAllAlloc(allocator, 1024);
     defer allocator.free(result);
-
     const trimmed_result = std.mem.trim(u8, result, "\n");
     return allocator.dupe(u8, trimmed_result);
 }
@@ -376,7 +375,7 @@ fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
     const boot_time = try getBootTime(allocator);
     const current_time = std.time.timestamp();
     if (current_time < boot_time) return error.InvalidBootTime;
-    
+
     const uptime_seconds: u64 = @intCast(current_time - boot_time);
     return formatUptime(allocator, uptime_seconds);
 }
@@ -633,7 +632,34 @@ fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "echo", "$THEME" }, "Unknown");
+    const global_preferences = try std.fs.path.join(allocator, &[_][]const u8{
+        fetchEnvVar(allocator, "HOME"),
+        "Library",
+        "Preferences",
+        ".GlobalPreferences.plist",
+    });
+
+    const wm_theme = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleInterfaceStyle", global_preferences }, "Light");
+    const wm_theme_color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences }, "-2");
+    const theme = wm_theme catch "Light";
+    const color_str = wm_theme_color_str catch "-2";
+    const color = switch (std.fmt.parseInt(i32, color_str, 10) catch -2) {
+        -1 => "Graphite",
+        0 => "Red",
+        1 => "Orange",
+        2 => "Yellow",
+        3 => "Green",
+        5 => "Purple",
+        6 => "Pink",
+        else => "Blue",
+    };
+
+    var result = std.ArrayList(u8).init(allocator);
+    try result.appendSlice(color);
+    try result.appendSlice(" (");
+    try result.appendSlice(theme);
+    try result.appendSlice(")");
+    return result.toOwnedSlice();
 }
 
 fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
