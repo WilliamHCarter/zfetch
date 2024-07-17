@@ -170,122 +170,25 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
     const allocator = arena.allocator();
 
     switch (component.kind) {
-        .Username => try renderUsername(buffer, allocator),
-        .OS => try renderOS(buffer, allocator),
-        .Hostname => try renderHostname(buffer, allocator),
-        .Kernel => try renderKernel(buffer, allocator),
-        .Uptime => try renderUptime(buffer, allocator),
-        .Packages => try renderPackages(buffer, allocator),
-        .Shell => try renderShell(buffer, allocator),
-        .Terminal => try renderTerminal(buffer, allocator),
-        .Resolution => try renderResolution(buffer, allocator),
-        .DE => try renderDE(buffer, allocator),
-        .WM => try renderWM(buffer, allocator),
-        .Theme => try renderTheme(buffer, allocator),
-        .CPU => try renderCPU(buffer, allocator),
-        .GPU => try renderGPU(buffer, allocator),
+        .Username => try buffer.addComponentRow("", try fetch.getUsername(allocator)),
+        .OS => try buffer.addComponentRow("OS: ", try fetch.getOS(allocator)),
+        .Hostname => try buffer.addComponentRow("Host: ", try fetch.getHostDevice(allocator)),
+        .Kernel => try buffer.addComponentRow("Kernel: ", try fetch.getKernel(allocator)),
+        .Uptime => try buffer.addComponentRow("Uptime: ", try fetch.getUptime(allocator)),
+        .Packages => try buffer.addComponentRow("Packages: ", try fetch.getPackages(allocator)),
+        .Shell => try buffer.addComponentRow("Shell: ", try fetch.getShell(allocator)),
+        .Terminal => try buffer.addComponentRow("Terminal: ", try fetch.getTerminal(allocator)),
+        .Resolution => try buffer.addComponentRow("Resolution: ", try fetch.getResolution(allocator)),
+        .DE => try buffer.addComponentRow("DE: ", try fetch.getDE(allocator)),
+        .WM => try buffer.addComponentRow("WM: ", try fetch.getWM(allocator)),
+        .Theme => try buffer.addComponentRow("Theme: ", try fetch.getTheme(allocator)),
+        .CPU => try buffer.addComponentRow("CPU: ", try fetch.getCPU(allocator)),
+        .GPU => try buffer.addComponentRow("GPU: ", try fetch.getGPU(allocator)),
         .Memory => try renderMemory(component, buffer, allocator),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
         .Colors => try renderColors(buffer, allocator),
     }
-}
-
-fn renderUsername(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const username = try fetch.getUsername(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, username);
-    try buffer.addRow();
-}
-
-fn renderOS(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const os = try fetch.getOS(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "OS: ");
-    try buffer.write(buffer.getCurrentRow(), 4, os);
-    try buffer.addRow();
-}
-
-fn renderHostname(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const hostname = try fetch.getHostDevice(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Host: ");
-    try buffer.write(buffer.getCurrentRow(), 6, hostname);
-    try buffer.addRow();
-}
-
-fn renderKernel(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const kernel = try fetch.getKernel(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Kernel: ");
-    try buffer.write(buffer.getCurrentRow(), 8, kernel);
-    try buffer.addRow();
-}
-
-fn renderUptime(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const uptime = try fetch.getUptime(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Uptime: ");
-    try buffer.write(buffer.getCurrentRow(), 8, uptime);
-    try buffer.addRow();
-}
-
-fn renderPackages(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const packages = try fetch.getPackages(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Packages: ");
-    try buffer.write(buffer.getCurrentRow(), 10, packages);
-    try buffer.addRow();
-}
-
-fn renderShell(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const shell = try fetch.getShell(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Shell: ");
-    try buffer.write(buffer.getCurrentRow(), 7, shell);
-    try buffer.addRow();
-}
-
-fn renderTerminal(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const terminal = try fetch.getTerminal(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Terminal: ");
-    try buffer.write(buffer.getCurrentRow(), 10, terminal);
-    try buffer.addRow();
-}
-
-fn renderResolution(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const resolution = try fetch.getResolution(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Resolution: ");
-    try buffer.write(buffer.getCurrentRow(), 12, resolution);
-    try buffer.addRow();
-}
-
-fn renderDE(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const de = try fetch.getDE(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "DE: ");
-    try buffer.write(buffer.getCurrentRow(), 4, de);
-    try buffer.addRow();
-}
-
-fn renderWM(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const wm = try fetch.getWM(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "WM: ");
-    try buffer.write(buffer.getCurrentRow(), 4, wm);
-    try buffer.addRow();
-}
-
-fn renderTheme(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const theme = try fetch.getTheme(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "Theme: ");
-    try buffer.write(buffer.getCurrentRow(), 7, theme);
-    try buffer.addRow();
-}
-
-fn renderCPU(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const cpu = try fetch.getCPU(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "CPU: ");
-    try buffer.write(buffer.getCurrentRow(), 5, cpu);
-    try buffer.addRow();
-}
-
-fn renderGPU(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const gpu = try fetch.getGPU(allocator);
-    try buffer.write(buffer.getCurrentRow(), 0, "GPU: ");
-    try buffer.write(buffer.getCurrentRow(), 5, gpu);
-    try buffer.addRow();
 }
 
 //=========================== Memory Rendering ===========================
@@ -354,10 +257,7 @@ fn renderMemory(component: Component, buffer: *buf.Buffer, allocator: std.mem.Al
             memory = std.fmt.allocPrint(allocator, "{s}{s} / {s}{s}", .{ used, unitToStr(used_unit), total, unitToStr(total_unit) }) catch "Rendering Error";
         },
     }
-
-    try buffer.write(buffer.getCurrentRow(), 0, "Memory: ");
-    try buffer.write(buffer.getCurrentRow(), 8, memory);
-    try buffer.addRow();
+    try buffer.addComponentRow("Memory: ", memory);
 }
 
 //=========================== Logo Rendering ===========================

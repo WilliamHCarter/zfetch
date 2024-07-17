@@ -109,4 +109,10 @@ pub const Buffer = struct {
             self.lines.items[k] = new_line;
         }
     }
+
+    pub fn addComponentRow(self: *Buffer, label: []const u8, data: []const u8) !void {
+        try self.write(self.row_count, 0, label);
+        try self.write(self.row_count, label.len, data);
+        try self.addRow();
+    }
 };
