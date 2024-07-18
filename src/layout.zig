@@ -124,6 +124,26 @@ pub fn render(theme: Theme) !void {
     var last_component_end_time: i128 = 0;
     var timer_idx: i128 = 0;
     var logo: ?Component = undefined;
+
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .allocator = allocator, .n_jobs = 6 });
+    defer pool.deinit();
+
+    var buffr = try buf.Buffer.init(allocator, 50, 80);
+    defer buffr.deinit();
+
+    var results = try allocator.alloc([]const u8, theme.components.items.len);
+    defer allocator.free(results);
+
+    var wait_group: std.Thread.WaitGroup = .{};
+
+    for (theme.components.items, 0..) |component, i| {
+        wait_group.start();
+        try pool.spawn(fetchJob, .{ &wait_group, &results[i], component, allocator });
+    }
+
+    wait_group.wait();
+
     for (theme.components.items) |component| {
         if (timer_idx == 0) {
             first_component_time = std.time.microTimestamp();
@@ -188,6 +208,37 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
         .Colors => try renderColors(buffer, allocator),
+    }
+}
+
+fn fetchJob(wait_group: *std.Thread.WaitGroup, result: *[]const u8, component: Component, allocator: std.mem.Allocator) void {
+    defer wait_group.finish();
+    result.* = fetchComponent(allocator, component) catch unreachable;
+}
+fn fetchComponent(buffer: *buf.Buffer, component: Component) !void {
+    var arena = std.heap.ArenaAllocator.init(buffer.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    switch (component.kind) {
+        .Username => try fetch.getUsername(allocator),
+        .OS => try fetch.getOS(allocator),
+        .Hostname => try fetch.getHostDevice(allocator),
+        .Kernel => try fetch.getKernel(allocator),
+        .Uptime => try fetch.getUptime(allocator),
+        .Packages => try fetch.getPackages(allocator),
+        .Shell => try fetch.getShell(allocator),
+        .Terminal => try fetch.getTerminal(allocator),
+        .Resolution => fetch.getResolution(allocator),
+        .DE => try fetch.getDE(allocator),
+        .WM => try fetch.getWM(allocator),
+        .Theme => try fetch.getTheme(allocator),
+        .CPU => try fetch.getCPU(allocator),
+        .GPU => try fetch.getGPU(allocator),
+        .Memory => "",
+        .Logo => "",
+        .TopBar => "",
+        .Colors => "",
     }
 }
 
