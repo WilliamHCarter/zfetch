@@ -5,7 +5,8 @@
 //==================================================================================================
 const std = @import("std");
 const fetch = @import("fetch.zig");
-const buf = @import("buffer.zig");
+const buf = @import("utils/buffer.zig");
+const Timer = @import("utils/timer.zig").Timer;
 //=========================== Data Structures ===========================
 pub const Component = struct {
     kind: ComponentKind,
@@ -122,6 +123,10 @@ pub fn render(theme: Theme) !void {
         if (err == .leak) std.debug.print("Memory leaks detected: {}\n", .{err});
     }
 
+    var timer = try Timer.init(allocator);
+    defer timer.deinit();
+    timer.start();
+
     var results = std.ArrayList(FetchResult).init(allocator);
     defer {
         for (results.items) |item| {
@@ -146,6 +151,7 @@ pub fn render(theme: Theme) !void {
             &mutex,
             &fetch_queue,
             &results,
+            &timer,
         });
     }
 
@@ -168,6 +174,7 @@ pub fn render(theme: Theme) !void {
     }
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
+    try timer.printResults(stdout);
 }
 
 fn fetchWorker(
@@ -175,6 +182,7 @@ fn fetchWorker(
     mutex: *std.Thread.Mutex,
     fetch_queue: *std.ArrayList(Component),
     results: *std.ArrayList(FetchResult),
+    timer: *Timer,
 ) !void {
     while (true) {
         mutex.lock();
@@ -184,11 +192,18 @@ fn fetchWorker(
         };
         mutex.unlock();
 
+        const lap_key = try std.fmt.allocPrint(allocator, "fetch_{s}", .{@tagName(component.kind)});
+        const start_time = try timer.startLap(lap_key);
+
         const result = fetchComponent(allocator, component);
+
+        try timer.endLap(lap_key, start_time);
 
         mutex.lock();
         try results.append(.{ .component = component, .result = result });
         mutex.unlock();
+
+        allocator.free(lap_key);
     }
 }
 
