@@ -118,33 +118,37 @@ pub fn render(theme: Theme) !void {
     }
     const allocator = gpa.allocator();
 
-    var buffer = try buf.Buffer.init(allocator, 50, 80);
-    defer buffer.deinit();
     var first_component_time: i128 = 0;
     var last_component_end_time: i128 = 0;
     var timer_idx: i128 = 0;
+
+    //Create thread-safe buffer for fetch results
+    var fetch_results = try allocator.alloc(std.atomic.Value(*[]u8), theme.components.items.len);
+    defer allocator.free(fetch_results);
+    for (fetch_results) |*result| {
+        result.* = std.atomic.Value(*[]u8).init(undefined);
+    }
+
+    var buffer = try buf.Buffer.init(allocator, 50, 80);
+    defer buffer.deinit();
     var logo: ?Component = undefined;
 
     var pool: std.Thread.Pool = undefined;
     try pool.init(.{ .allocator = allocator, .n_jobs = 6 });
     defer pool.deinit();
 
-    var buffr = try buf.Buffer.init(allocator, 50, 80);
-    defer buffr.deinit();
-
-    var results = try allocator.alloc([]const u8, theme.components.items.len);
-    defer allocator.free(results);
+    const component_list = try allocator.alloc([]const u8, theme.components.items.len);
+    defer allocator.free(component_list);
 
     var wait_group: std.Thread.WaitGroup = .{};
 
     for (theme.components.items, 0..) |component, i| {
         wait_group.start();
-        try pool.spawn(fetchJob, .{ &wait_group, &results[i], component, allocator });
+        try pool.spawn(fetchJob, .{ &wait_group, &fetch_results[i], component, allocator });
     }
 
     wait_group.wait();
-
-    for (theme.components.items) |component| {
+    for (theme.components.items, 0..) |component, i| {
         if (timer_idx == 0) {
             first_component_time = std.time.microTimestamp();
         }
@@ -152,7 +156,8 @@ pub fn render(theme: Theme) !void {
         if (component.kind == .Logo) { //Defer logo last to position correctly
             logo = component;
         } else {
-            try renderComponent(&buffer, component);
+            const result = fetch_results[i].load(.unordered);
+            try renderComponent(&buffer, component, &result);
         }
 
         const component_end_time = std.time.microTimestamp();
@@ -184,26 +189,26 @@ pub fn render(theme: Theme) !void {
     try buffer.render(stdout);
 }
 
-fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
+fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(buffer.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     switch (component.kind) {
-        .Username => try buffer.addComponentRow("", try fetch.getUsername(allocator)),
-        .OS => try buffer.addComponentRow("OS: ", try fetch.getOS(allocator)),
-        .Hostname => try buffer.addComponentRow("Host: ", try fetch.getHostDevice(allocator)),
-        .Kernel => try buffer.addComponentRow("Kernel: ", try fetch.getKernel(allocator)),
-        .Uptime => try buffer.addComponentRow("Uptime: ", try fetch.getUptime(allocator)),
-        .Packages => try buffer.addComponentRow("Packages: ", try fetch.getPackages(allocator)),
-        .Shell => try buffer.addComponentRow("Shell: ", try fetch.getShell(allocator)),
-        .Terminal => try buffer.addComponentRow("Terminal: ", try fetch.getTerminal(allocator)),
-        .Resolution => try buffer.addComponentRow("Resolution: ", try fetch.getResolution(allocator)),
-        .DE => try buffer.addComponentRow("DE: ", try fetch.getDE(allocator)),
-        .WM => try buffer.addComponentRow("WM: ", try fetch.getWM(allocator)),
-        .Theme => try buffer.addComponentRow("Theme: ", try fetch.getTheme(allocator)),
-        .CPU => try buffer.addComponentRow("CPU: ", try fetch.getCPU(allocator)),
-        .GPU => try buffer.addComponentRow("GPU: ", try fetch.getGPU(allocator)),
+        .Username => try buffer.addComponentRow("", fetched_result),
+        .OS => try buffer.addComponentRow("OS: ", fetched_result),
+        .Hostname => try buffer.addComponentRow("Host: ", fetched_result),
+        .Kernel => try buffer.addComponentRow("Kernel: ", fetched_result),
+        .Uptime => try buffer.addComponentRow("Uptime: ", fetched_result),
+        .Packages => try buffer.addComponentRow("Packages: ", fetched_result),
+        .Shell => try buffer.addComponentRow("Shell: ", fetched_result),
+        .Terminal => try buffer.addComponentRow("Terminal: ", fetched_result),
+        .Resolution => try buffer.addComponentRow("Resolution: ", fetched_result),
+        .DE => try buffer.addComponentRow("DE: ", fetched_result),
+        .WM => try buffer.addComponentRow("WM: ", fetched_result),
+        .Theme => try buffer.addComponentRow("Theme: ", fetched_result),
+        .CPU => try buffer.addComponentRow("CPU: ", fetched_result),
+        .GPU => try buffer.addComponentRow("GPU: ", fetched_result),
         .Memory => try renderMemory(component, buffer, allocator),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
@@ -211,16 +216,14 @@ fn renderComponent(buffer: *buf.Buffer, component: Component) !void {
     }
 }
 
-fn fetchJob(wait_group: *std.Thread.WaitGroup, result: *[]const u8, component: Component, allocator: std.mem.Allocator) void {
+fn fetchJob(wait_group: *std.Thread.WaitGroup, fetch_result: *std.atomic.Value(*[]u8), component: Component, allocator: std.mem.Allocator) void {
     defer wait_group.finish();
-    result.* = fetchComponent(allocator, component) catch unreachable;
+    const result = fetchComponent(allocator, component);
+    fetch_result.store(result, .unordered);
 }
-fn fetchComponent(buffer: *buf.Buffer, component: Component) !void {
-    var arena = std.heap.ArenaAllocator.init(buffer.allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
-    switch (component.kind) {
+fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8 {
+    return switch (component.kind) {
         .Username => try fetch.getUsername(allocator),
         .OS => try fetch.getOS(allocator),
         .Hostname => try fetch.getHostDevice(allocator),
@@ -235,11 +238,8 @@ fn fetchComponent(buffer: *buf.Buffer, component: Component) !void {
         .Theme => try fetch.getTheme(allocator),
         .CPU => try fetch.getCPU(allocator),
         .GPU => try fetch.getGPU(allocator),
-        .Memory => "",
-        .Logo => "",
-        .TopBar => "",
-        .Colors => "",
-    }
+        .Memory, .Logo, .TopBar, .Colors => try allocator.dupe(u8, ""),
+    };
 }
 
 //=========================== Memory Rendering ===========================
