@@ -461,12 +461,15 @@ pub fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
     };
 
     const shell_path = try std.process.getEnvVarOwned(allocator, "SHELL");
+    defer allocator.free(shell_path);
     const shell_name = std.fs.path.basename(shell_path);
 
     for (shells) |shell| {
         if (std.mem.eql(u8, shell_name, shell.name)) {
             const version = try execCommand(allocator, &.{ shell_path, "-c", shell.command }, "Unknown");
+            defer allocator.free(version);
             const trimmed_version = try shellTrim(allocator, shell, version);
+            defer allocator.free(trimmed_version);
             return try std.fmt.allocPrint(allocator, "{s} {s}", .{ shell_name, trimmed_version });
         }
     }
@@ -640,7 +643,7 @@ fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
     });
 
     const wm_theme = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleInterfaceStyle", global_preferences }, "Light");
-    const wm_theme_color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences }, "-2");
+    const wm_theme_color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences, "2>/dev/null" }, "-2");
     const theme = wm_theme catch "Light";
     const color_str = wm_theme_color_str catch "-2";
     const color = switch (std.fmt.parseInt(i32, color_str, 10) catch -2) {

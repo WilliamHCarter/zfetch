@@ -109,84 +109,98 @@ fn parseComponent(component_str: []const u8) !Component {
 }
 
 //=========================== Rendering ===========================
+const FetchResult = struct {
+    component: Component,
+    result: []const u8,
+};
+
 pub fn render(theme: Theme) !void {
-    const start_time = std.time.microTimestamp();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
     defer {
         const err = gpa.deinit();
         if (err == .leak) std.debug.print("Memory leaks detected: {}\n", .{err});
     }
-    const allocator = gpa.allocator();
 
-    var first_component_time: i128 = 0;
-    var last_component_end_time: i128 = 0;
-    var timer_idx: i128 = 0;
-
-    //Create thread-safe buffer for fetch results
-    var fetch_results = try allocator.alloc(std.atomic.Value(*[]u8), theme.components.items.len);
-    defer allocator.free(fetch_results);
-    for (fetch_results) |*result| {
-        result.* = std.atomic.Value(*[]u8).init(undefined);
+    var results = std.ArrayList(FetchResult).init(allocator);
+    defer {
+        for (results.items) |item| {
+            allocator.free(item.result);
+        }
+        results.deinit();
     }
 
     var buffer = try buf.Buffer.init(allocator, 50, 80);
     defer buffer.deinit();
-    var logo: ?Component = undefined;
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .allocator = allocator, .n_jobs = 6 });
-    defer pool.deinit();
+    var mutex = std.Thread.Mutex{};
+    var fetch_queue = std.ArrayList(Component).init(allocator);
+    defer fetch_queue.deinit();
 
-    const component_list = try allocator.alloc([]const u8, theme.components.items.len);
-    defer allocator.free(component_list);
+    try fetch_queue.appendSlice(theme.components.items);
 
-    var wait_group: std.Thread.WaitGroup = .{};
-
-    for (theme.components.items, 0..) |component, i| {
-        wait_group.start();
-        try pool.spawn(fetchJob, .{ &wait_group, &fetch_results[i], component, allocator });
+    var threads: [6]std.Thread = undefined;
+    for (&threads) |*thread| {
+        thread.* = try std.Thread.spawn(.{}, fetchWorker, .{
+            allocator,
+            &mutex,
+            &fetch_queue,
+            &results,
+        });
     }
 
-    wait_group.wait();
-    for (theme.components.items, 0..) |component, i| {
-        if (timer_idx == 0) {
-            first_component_time = std.time.microTimestamp();
-        }
-        const component_start_time = std.time.microTimestamp();
-        if (component.kind == .Logo) { //Defer logo last to position correctly
-            logo = component;
-        } else {
-            const result = fetch_results[i].load(.unordered);
-            try renderComponent(&buffer, component, &result);
-        }
+    for (threads) |thread| {
+        thread.join();
+    }
 
-        const component_end_time = std.time.microTimestamp();
-        std.debug.print("Component {} rendered in {} ns\n", .{ timer_idx, component_end_time - component_start_time });
-        last_component_end_time = component_end_time;
-        timer_idx += 1;
+    std.sort.block(FetchResult, results.items, theme, componentOrder);
+    var logo: ?Component = undefined;
+    for (results.items) |result| {
+        if (result.component.kind == ComponentKind.Logo) {
+            logo = result.component;
+            continue;
+        }
+        try renderComponent(&buffer, result.component, result.result);
     }
 
     if (logo != null) {
-        const logo_start_time = std.time.microTimestamp();
-        try renderComponent(&buffer, logo.?);
-        const logo_end_time = std.time.microTimestamp();
-
-        std.debug.print("Logo component rendered in {} ns\n", .{logo_end_time - logo_start_time});
-        last_component_end_time = logo_end_time;
+        try renderComponent(&buffer, logo.?, "");
     }
-
-    const render_end_time = std.time.microTimestamp();
-    const total_render_time = render_end_time - start_time;
-    const time_to_first_component = first_component_time - start_time;
-    const time_after_last_component = render_end_time - last_component_end_time;
-
-    std.debug.print("Time to first component: {} ns\n", .{time_to_first_component});
-    std.debug.print("Time to render all components: {} ns\n", .{last_component_end_time - first_component_time});
-    std.debug.print("Time after last component to finish: {} ns\n", .{time_after_last_component});
-    std.debug.print("Total render time: {} ns\n", .{total_render_time});
-
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
+}
+
+fn fetchWorker(
+    allocator: std.mem.Allocator,
+    mutex: *std.Thread.Mutex,
+    fetch_queue: *std.ArrayList(Component),
+    results: *std.ArrayList(FetchResult),
+) !void {
+    while (true) {
+        mutex.lock();
+        const component = if (fetch_queue.popOrNull()) |c| c else {
+            mutex.unlock();
+            break;
+        };
+        mutex.unlock();
+
+        const result = fetchComponent(allocator, component);
+
+        mutex.lock();
+        try results.append(.{ .component = component, .result = result });
+        mutex.unlock();
+    }
+}
+
+fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
+    for (theme.components.items) |component| {
+        if (component.kind == a.component.kind) {
+            return true;
+        } else if (component.kind == b.component.kind) {
+            return false;
+        }
+    }
+    return false;
 }
 
 fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []const u8) !void {
@@ -216,30 +230,24 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     }
 }
 
-fn fetchJob(wait_group: *std.Thread.WaitGroup, fetch_result: *std.atomic.Value(*[]u8), component: Component, allocator: std.mem.Allocator) void {
-    defer wait_group.finish();
-    const result = fetchComponent(allocator, component);
-    fetch_result.store(result, .unordered);
-}
-
 fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8 {
     return switch (component.kind) {
-        .Username => try fetch.getUsername(allocator),
-        .OS => try fetch.getOS(allocator),
-        .Hostname => try fetch.getHostDevice(allocator),
-        .Kernel => try fetch.getKernel(allocator),
-        .Uptime => try fetch.getUptime(allocator),
-        .Packages => try fetch.getPackages(allocator),
-        .Shell => try fetch.getShell(allocator),
-        .Terminal => try fetch.getTerminal(allocator),
+        .Username => fetch.getUsername(allocator),
+        .OS => fetch.getOS(allocator),
+        .Hostname => fetch.getHostDevice(allocator),
+        .Kernel => fetch.getKernel(allocator),
+        .Uptime => fetch.getUptime(allocator),
+        .Packages => fetch.getPackages(allocator),
+        .Shell => fetch.getShell(allocator),
+        .Terminal => fetch.getTerminal(allocator),
         .Resolution => fetch.getResolution(allocator),
-        .DE => try fetch.getDE(allocator),
-        .WM => try fetch.getWM(allocator),
-        .Theme => try fetch.getTheme(allocator),
-        .CPU => try fetch.getCPU(allocator),
-        .GPU => try fetch.getGPU(allocator),
-        .Memory, .Logo, .TopBar, .Colors => try allocator.dupe(u8, ""),
-    };
+        .DE => fetch.getDE(allocator),
+        .WM => fetch.getWM(allocator),
+        .Theme => fetch.getTheme(allocator),
+        .CPU => fetch.getCPU(allocator),
+        .GPU => fetch.getGPU(allocator),
+        .Memory, .Logo, .TopBar, .Colors => allocator.dupe(u8, ""),
+    } catch "Fetch Error";
 }
 
 //=========================== Memory Rendering ===========================
