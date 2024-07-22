@@ -35,7 +35,7 @@
                 }
             </style>
             <div class="container">
-                <img class="logo" src="logo.png" alt="ZFetchLogo" />
+                <img class="logo" src="https://raw.githubusercontent.com/williamhcarter/zfetch/main/logo.png" alt="ZFetchLogo" />
                 <h1>zfetch</h1>
             </div>
         </div>
