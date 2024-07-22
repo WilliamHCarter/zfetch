@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="header.svg" width="800" height="200" alt="zfetch">
+  <img src="readme-header.svg" width="800" height="200" alt="zfetch">
 </div>
 
 # zfetch
