@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/05ddf3f5-8acf-4abf-b59a-00eb999bc27b" alt="ZFetchLogo" width="300" style="image-rendering: pixelated; image-rendering: crisp-edges;">
+  <img src="header.svg" width="800" height="200" alt="zfetch">
 </div>
 
 # zfetch
