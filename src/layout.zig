@@ -63,6 +63,11 @@ const Theme = struct {
         self.components.deinit();
     }
 };
+
+const Colors = struct {
+    const Primary = "\x1b[1m\x1b[93m";
+    const Secondary = "\x1b[1m\x1b[96m";
+};
 //=========================== Parsing ===========================
 
 pub fn loadTheme(name: []const u8) !Theme {
@@ -135,7 +140,7 @@ pub fn render(theme: Theme) !void {
         results.deinit();
     }
 
-    var buffer = try buf.Buffer.init(allocator, 50, 80);
+    var buffer = try buf.Buffer.init(allocator, 50, 100);
     defer buffer.deinit();
 
     var mutex = std.Thread.Mutex{};
@@ -174,7 +179,7 @@ pub fn render(theme: Theme) !void {
     }
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
-    try timer.printResults(stdout);
+    // try timer.printResults(stdout);
 }
 
 fn fetchWorker(
@@ -223,21 +228,24 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    const color_code = try std.fmt.allocPrint(allocator, "{s}", .{Colors.Primary});
+    const reset_code = "\x1b[0m";
+
     switch (component.kind) {
-        .Username => try buffer.addComponentRow("", fetched_result),
-        .OS => try buffer.addComponentRow("OS: ", fetched_result),
-        .Hostname => try buffer.addComponentRow("Host: ", fetched_result),
-        .Kernel => try buffer.addComponentRow("Kernel: ", fetched_result),
-        .Uptime => try buffer.addComponentRow("Uptime: ", fetched_result),
-        .Packages => try buffer.addComponentRow("Packages: ", fetched_result),
-        .Shell => try buffer.addComponentRow("Shell: ", fetched_result),
-        .Terminal => try buffer.addComponentRow("Terminal: ", fetched_result),
-        .Resolution => try buffer.addComponentRow("Resolution: ", fetched_result),
-        .DE => try buffer.addComponentRow("DE: ", fetched_result),
-        .WM => try buffer.addComponentRow("WM: ", fetched_result),
-        .Theme => try buffer.addComponentRow("Theme: ", fetched_result),
-        .CPU => try buffer.addComponentRow("CPU: ", fetched_result),
-        .GPU => try buffer.addComponentRow("GPU: ", fetched_result),
+        .Username => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ color_code, fetched_result, reset_code }),""),
+        .OS => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}OS:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Hostname => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Host:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Kernel => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Kernel:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Uptime => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Uptime:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Packages => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Packages:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Shell => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Shell:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Terminal => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Terminal:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Resolution => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Resolution:{s} ", .{ color_code, reset_code }), fetched_result),
+        .DE => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}DE:{s} ", .{ color_code, reset_code }), fetched_result),
+        .WM => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}WM:{s} ", .{ color_code, reset_code }), fetched_result),
+        .Theme => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Theme:{s} ", .{ color_code, reset_code }), fetched_result),
+        .CPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}CPU:{s} ", .{ color_code, reset_code }), fetched_result),
+        .GPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}GPU:{s} ", .{ color_code, reset_code }), fetched_result),
         .Memory => try renderMemory(component, buffer, allocator),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
