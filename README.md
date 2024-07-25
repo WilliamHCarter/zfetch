@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="readme-header.svg" width="800" height="200" alt="zfetch">
+  <img src="readme-header.svg" width="400" height="100" alt="zfetch">
 </div>
 <p align="center">A command-line system information tool written in Zig</p>
-<p align="center">
-
+<div align="center">
 <a href="./LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 <img alt="GitHub top language" src="https://img.shields.io/github/languages/top/williamhcarter/zfetch?logo=Zig&label=%20">
-</p>
+</div>
+<img height="16px">
 
 
 
