@@ -66,7 +66,34 @@ const Theme = struct {
 
 const Colors = struct {
     const Primary = "\x1b[1m\x1b[93m";
-    const Secondary = "\x1b[1m\x1b[96m";
+    const Secondary = "\x1b[1m\x1b[92m";
+};
+
+const ColorMap = struct {
+    codes: [16][]const u8,
+
+    fn init() ColorMap {
+        return .{
+            .codes = .{
+                "\x1b[30m", // Black
+                "\x1b[31m", // Red
+                "\x1b[32m", // Green
+                "\x1b[33m", // Yellow
+                "\x1b[34m", // Blue
+                "\x1b[35m", // Magenta
+                "\x1b[36m", // Cyan
+                "\x1b[37m", // White
+                "\x1b[90m", // Bright Black
+                "\x1b[91m", // Bright Red
+                "\x1b[92m", // Bright Green
+                "\x1b[93m", // Bright Yellow
+                "\x1b[94m", // Bright Blue
+                "\x1b[95m", // Bright Magenta
+                "\x1b[96m", // Bright Cyan
+                "\x1b[97m", // Bright White
+            },
+        };
+    }
 };
 //=========================== Parsing ===========================
 
@@ -227,26 +254,24 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     var arena = std.heap.ArenaAllocator.init(buffer.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    const color_code = try std.fmt.allocPrint(allocator, "{s}", .{Colors.Primary});
     const reset_code = "\x1b[0m";
 
     switch (component.kind) {
-        .Username => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ color_code, fetched_result, reset_code }),""),
-        .OS => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}OS:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Hostname => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Host:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Kernel => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Kernel:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Uptime => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Uptime:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Packages => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Packages:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Shell => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Shell:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Terminal => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Terminal:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Resolution => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Resolution:{s} ", .{ color_code, reset_code }), fetched_result),
-        .DE => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}DE:{s} ", .{ color_code, reset_code }), fetched_result),
-        .WM => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}WM:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Theme => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Theme:{s} ", .{ color_code, reset_code }), fetched_result),
-        .CPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}CPU:{s} ", .{ color_code, reset_code }), fetched_result),
-        .GPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}GPU:{s} ", .{ color_code, reset_code }), fetched_result),
-        .Memory => try renderMemory(component, buffer, allocator),
+        .Username => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ Colors.Secondary, fetched_result, reset_code }), ""),
+        .OS => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}OS:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Hostname => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Host:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Kernel => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Kernel:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Uptime => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Uptime:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Packages => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Packages:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Shell => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Shell:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Terminal => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Terminal:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Resolution => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Resolution:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .DE => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}DE:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .WM => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}WM:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Theme => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Theme:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .CPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}CPU:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .GPU => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}GPU:{s} ", .{ Colors.Primary, reset_code }), fetched_result),
+        .Memory => try buffer.addComponentRow(try std.fmt.allocPrint(allocator, "{s}Memory:{s} ", .{ Colors.Primary, reset_code }), renderMemory(component, allocator)),
         .Logo => try renderLogo(buffer, component, allocator),
         .TopBar => try renderTopBar(buffer),
         .Colors => try renderColors(buffer, allocator),
@@ -313,8 +338,8 @@ fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit,
     return std.fmt.allocPrint(allocator, "{s}{s} / {s}{s}", .{ used, unitToStr(unit), total, unitToStr(unit) }) catch "Rendering Error";
 }
 
-fn renderMemory(component: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    var memory = try fetch.getMemory(allocator);
+fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
+    var memory = fetch.getMemory(allocator) catch "Fetch Error";
 
     var it = std.mem.split(u8, memory, " / ");
     const mem_used = it.next() orelse unreachable;
@@ -339,7 +364,7 @@ fn renderMemory(component: Component, buffer: *buf.Buffer, allocator: std.mem.Al
             memory = std.fmt.allocPrint(allocator, "{s}{s} / {s}{s}", .{ used, unitToStr(used_unit), total, unitToStr(total_unit) }) catch "Rendering Error";
         },
     }
-    try buffer.addComponentRow("Memory: ", memory);
+    return memory;
 }
 
 //=========================== Logo Rendering ===========================
@@ -355,17 +380,128 @@ fn getMaxWidth(ascii_art: []const u8) usize {
     var max: usize = 0;
     var lines = std.mem.split(u8, ascii_art, "\n");
     while (lines.next()) |line| {
-        max = @max(max, line.len);
+        var visual_length: usize = 0;
+        var i: usize = 0;
+        while (i < line.len) {
+            if (line[i] == '$' and i + 1 < line.len) {
+                if (line[i + 1] == '{' and i + 4 < line.len and line[i + 4] == '}') {
+                    // Skip ${c#} format
+                    i += 5;
+                } else if (line[i + 1] >= '0' and line[i + 1] <= '9') {
+                    // Skip $# format
+                    i += 2;
+                } else {
+                    visual_length += 1;
+                    i += 1;
+                }
+            } else {
+                visual_length += 1;
+                i += 1;
+            }
+        }
+        max = @max(max, visual_length);
     }
     return max;
+}
+
+fn getLineWidths(ascii_art: []const u8) ![]usize {
+    var widths = std.ArrayList(usize).init(std.heap.page_allocator);
+    errdefer widths.deinit();
+
+    var lines = std.mem.split(u8, ascii_art, "\n");
+    while (lines.next()) |line| {
+        var visual_length: usize = 0;
+        var i: usize = 0;
+        while (i < line.len) {
+            if (line[i] == '$' and i + 1 < line.len) {
+                if (line[i + 1] == '{' and i + 4 < line.len and line[i + 4] == '}') {
+                    // Skip ${c#} format
+                    i += 5;
+                } else if (line[i + 1] >= '0' and line[i + 1] <= '9') {
+                    // Skip $# format
+                    i += 2;
+                } else {
+                    visual_length += 1;
+                    i += 1;
+                }
+            } else {
+                visual_length += 1;
+                i += 1;
+            }
+        }
+        try widths.append(visual_length);
+    }
+
+    return widths.toOwnedSlice();
+}
+
+fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: ColorMap) ![]u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    errdefer result.deinit();
+
+    var current_color: ?usize = null;
+    var i: usize = 0;
+
+    while (i < ascii_art.len) {
+        if (ascii_art[i] == '\n') {
+            try result.append('\n');
+            if (current_color) |color| {
+                try result.appendSlice(color_map.codes[color]);
+            }
+            i += 1;
+            continue;
+        }
+
+        if (ascii_art[i] == '$' and i + 1 < ascii_art.len) {
+            var new_color: ?usize = null;
+            var skip: usize = 0;
+
+            if (ascii_art[i + 1] == '{' and i + 4 < ascii_art.len and ascii_art[i + 4] == '}') {
+                // Handle ${c3} format
+                const color_index = ascii_art[i + 3] - '0';
+                if (color_index >= 0 and color_index < 16) {
+                    new_color = color_index;
+                    skip = 5;
+                }
+            } else if (ascii_art[i + 1] >= '0' and ascii_art[i + 1] <= '9') {
+                // Handle $3 format
+                const color_index = ascii_art[i + 1] - '0';
+                if (color_index >= 0 and color_index < 16) {
+                    new_color = color_index;
+                    skip = 2;
+                }
+            }
+
+            if (new_color) |color| {
+                try result.appendSlice(color_map.codes[color]);
+                current_color = color;
+                i += skip;
+                continue;
+            }
+        }
+
+        try result.append(ascii_art[i]);
+        i += 1;
+    }
+
+    try result.appendSlice("\x1b[0m"); // Reset color at the end
+    return result.toOwnedSlice();
 }
 
 fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allocator) !void {
     const position = component.properties.get("position") orelse "inline";
     const ascii_art = try fetch.getLogo(allocator);
+    const color_map = ColorMap.init();
+    const ascii_art_color = try colorize(allocator, ascii_art, color_map);
+    defer allocator.free(ascii_art_color);
+
     const logo_width = getMaxWidth(ascii_art);
-    var ascii_lines = std.mem.split(u8, ascii_art, "\n");
-    const ascii_height = std.mem.count(u8, ascii_art, "\n") + 1;
+    std.debug.print("Logo width: {}\n", .{logo_width});
+    const line_widths = try getLineWidths(ascii_art_color);
+    const visual_line_widths = try getLineWidths(ascii_art);
+    var ascii_lines = std.mem.split(u8, ascii_art_color, "\n");
+    const ascii_height = std.mem.count(u8, ascii_art_color, "\n") + 1;
+
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top => {
             try buffer.shiftRowsDown(0, ascii_height);
@@ -387,7 +523,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
         .Left => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                var curr_line = try std.heap.page_allocator.alloc(u8, logo_width + 3);
+                var curr_line = try std.heap.page_allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();
                 }
