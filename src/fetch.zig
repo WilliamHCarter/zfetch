@@ -70,14 +70,10 @@ pub fn getKernelType() KernelType {
 
 //================= Fetch OS =================
 pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
         .Linux => linuxOS(),
-        .Darwin => darwinOS(arena_allocator),
-        .BSD => bsdOS(arena_allocator),
+        .Darwin => darwinOS(allocator),
+        .BSD => bsdOS(allocator),
         .Windows => windowsOS(),
         .Unknown => return error.UnknownOS,
     };
@@ -135,13 +131,9 @@ fn windowsOS() ![]const u8 {
 
 //================= Fetch Host Device =================
 pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
         .Linux => linuxDevice(),
-        .Darwin => darwinDevice(arena_allocator),
+        .Darwin => darwinDevice(allocator),
         else => return error.UnknownDevice,
     };
 
@@ -149,30 +141,27 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxDevice() ![]const u8 {
-    // var arena = std.heap.ArenaAllocator.init(allocator);
-    // defer arena.deinit();
-    // const arena_allocator = arena.allocator();
-
+ 
     // // Check for DMI information
-    // const board_vendor = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
-    // const board_name = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
+    // const board_vendor = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
+    // const board_name = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
     // if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
     //     return std.fmt.allocPrint(allocator, "{s} {s}", .{ board_vendor, board_name });
     // }
 
-    // const product_name = std.fs.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
-    // const product_version = std.fs.file.readFileToOwnedString(arena_allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
+    // const product_name = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
+    // const product_version = std.fs.file.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
     // if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
-    //     return std.fmt.allocPrint(arena_allocator, "{s} {s}", .{ product_name, product_version });
+    //     return std.fmt.allocPrint(allocator, "{s} {s}", .{ product_name, product_version });
     // }
     // // Check for firmware model
-    // const firmware_model = std.fs.readFileToOwnedString(arena_allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
+    // const firmware_model = std.fs.readFileToOwnedString(allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
     // if (!std.mem.eql(u8, firmware_model, "Unknown")) {
     //     return firmware_model;
     // }
 
     // // Check for temporary model information
-    // const tmp_model = std.fs.readFileToOwnedString(arena_allocator, "/tmp/sysinfo/model") catch "Unknown";
+    // const tmp_model = std.fs.readFileToOwnedString(allocator, "/tmp/sysinfo/model") catch "Unknown";
     // if (!std.mem.eql(u8, tmp_model, "Unknown")) {
     //     return tmp_model;
     // }
@@ -186,13 +175,10 @@ fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Kernel =================
 pub fn getKernel(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
     const result = try switch (getKernelType()) {
-        .Linux => linuxKernel(arena_allocator),
-        .Darwin => darwinKernel(arena_allocator),
-        .BSD => bsdKernel(arena_allocator),
+        .Linux => linuxKernel(allocator),
+        .Darwin => darwinKernel(allocator),
+        .BSD => bsdKernel(allocator),
         .Windows => windowsKernel(),
         .Unknown => return error.UnknownKernel,
     };
@@ -218,14 +204,10 @@ fn windowsKernel() ![]const u8 {
 
 //================= Fetch CPU =================
 pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxCPU(arena_allocator),
-        .Darwin => darwinCPU(arena_allocator),
-        .BSD => bsdCPU(arena_allocator),
+        .Linux => linuxCPU(allocator),
+        .Darwin => darwinCPU(allocator),
+        .BSD => bsdCPU(allocator),
         .Windows => windowsCPU(),
         .Unknown => return error.UnknownCPU,
     };
@@ -257,14 +239,10 @@ fn windowsCPU() ![]const u8 {
 
 //================= Fetch Memory =================
 pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxMemory(arena_allocator),
-        .Darwin => darwinMemory(arena_allocator),
-        .BSD => bsdMemory(arena_allocator),
+        .Linux => linuxMemory(allocator),
+        .Darwin => darwinMemory(allocator),
+        .BSD => bsdMemory(allocator),
         .Windows => windowsMemory(),
         .Unknown => return error.UnknownMemory,
     };
@@ -292,14 +270,10 @@ fn windowsMemory() ![]const u8 {
 
 //================= Fetch Uptime =================
 pub fn getUptime(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxUptime(arena_allocator),
-        .Darwin => darwinUptime(arena_allocator),
-        .BSD => bsdUptime(arena_allocator),
+        .Linux => linuxUptime(allocator),
+        .Darwin => darwinUptime(allocator),
+        .BSD => bsdUptime(allocator),
         .Windows => windowsUptime(),
         .Unknown => return error.UnknownUptime,
     };
@@ -386,14 +360,10 @@ fn windowsUptime() ![]const u8 {
 
 //================= Fetch Packages =================
 pub fn getPackages(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxPackages(arena_allocator),
-        .Darwin => darwinPackages(arena_allocator),
-        .BSD => bsdPackages(arena_allocator),
+        .Linux => linuxPackages(allocator),
+        .Darwin => darwinPackages(allocator),
+        .BSD => bsdPackages(allocator),
         .Windows => windowsPackages(),
         .Unknown => return error.UnknownPackages,
     };
@@ -517,14 +487,10 @@ fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Resolution =================
 pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxResolution(arena_allocator),
-        .Darwin => darwinResolution(arena_allocator),
-        .BSD => bsdResolution(arena_allocator),
+        .Linux => linuxResolution(allocator),
+        .Darwin => darwinResolution(allocator),
+        .BSD => bsdResolution(allocator),
         .Windows => windowsResolution(),
         .Unknown => return error.UnknownResolution,
     };
@@ -549,14 +515,10 @@ fn windowsResolution() ![]const u8 {
 
 //================= Fetch DE =================
 pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxDE(arena_allocator),
+        .Linux => linuxDE(allocator),
         .Darwin => darwinDE(),
-        .BSD => bsdDE(arena_allocator),
+        .BSD => bsdDE(allocator),
         .Windows => windowsDE(),
         .Unknown => return error.UnknownDE,
     };
@@ -581,14 +543,10 @@ fn windowsDE() ![]const u8 {
 
 //================= Fetch WM =================
 pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxWM(arena_allocator),
-        .Darwin => darwinWM(arena_allocator),
-        .BSD => bsdWM(arena_allocator),
+        .Linux => linuxWM(allocator),
+        .Darwin => darwinWM(allocator),
+        .BSD => bsdWM(allocator),
         .Windows => windowsWM(),
         .Unknown => return error.UnknownWM,
     };
@@ -615,14 +573,10 @@ fn windowsWM() ![]const u8 {
 
 //================= Fetch Theme =================
 pub fn getTheme(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxTheme(arena_allocator),
-        .Darwin => darwinTheme(arena_allocator),
-        .BSD => bsdTheme(arena_allocator),
+        .Linux => linuxTheme(allocator),
+        .Darwin => darwinTheme(allocator),
+        .BSD => bsdTheme(allocator),
         .Windows => windowsTheme(),
         .Unknown => return error.UnknownTheme,
     };
@@ -675,14 +629,10 @@ fn windowsTheme() ![]const u8 {
 
 //================= Fetch GPU =================
 pub fn getGPU(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
-        .Linux => linuxGPU(arena_allocator),
-        .Darwin => darwinGPU(arena_allocator),
-        .BSD => bsdGPU(arena_allocator),
+        .Linux => linuxGPU(allocator),
+        .Darwin => darwinGPU(allocator),
+        .BSD => bsdGPU(allocator),
         .Windows => windowsGPU(),
         .Unknown => return error.UnknownGPU,
     };
@@ -708,13 +658,9 @@ fn windowsGPU() ![]const u8 {
 
 //================= Fetch Logo =================
 pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
         .Linux => linuxLogo(),
-        .Darwin => darwinLogo(arena_allocator),
+        .Darwin => darwinLogo(allocator),
         .BSD => bsdLogo(),
         .Windows => windowsLogo(),
         .Unknown => return error.UnknownLogo,
@@ -757,13 +703,9 @@ fn windowsLogo() ![]const u8 {
 
 //================= Fetch Colors =================
 pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
     const result = try switch (getKernelType()) {
         .Linux => linuxColors(),
-        .Darwin => darwinColors(arena_allocator),
+        .Darwin => darwinColors(allocator),
         .BSD => bsdColors(),
         .Windows => windowsColors(),
         .Unknown => return error.UnknownLogo,

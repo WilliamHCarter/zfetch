@@ -279,21 +279,25 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
 }
 
 fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+    
     return switch (component.kind) {
-        .Username => fetch.getUsername(allocator),
-        .OS => fetch.getOS(allocator),
-        .Hostname => fetch.getHostDevice(allocator),
-        .Kernel => fetch.getKernel(allocator),
-        .Uptime => fetch.getUptime(allocator),
-        .Packages => fetch.getPackages(allocator),
-        .Shell => fetch.getShell(allocator),
-        .Terminal => fetch.getTerminal(allocator),
-        .Resolution => fetch.getResolution(allocator),
-        .DE => fetch.getDE(allocator),
-        .WM => fetch.getWM(allocator),
-        .Theme => fetch.getTheme(allocator),
-        .CPU => fetch.getCPU(allocator),
-        .GPU => fetch.getGPU(allocator),
+        .Username => allocator.dupe(u8, fetch.getUsername(arena_alloc)),
+        .OS => allocator.dupe(u8, fetch.getOS(arena_alloc),
+        .Hostname => allocator.dupe(u8,  fetch.getHostDevice(arena_alloc)),
+        .Kernel => allocator.dupe(u8,  fetch.getKernel(arena_alloc)),
+        .Uptime => allocator.dupe(u8,  fetch.getUptime(arena_alloc)),
+        .Packages => allocator.dupe(u8, fetch.getPackages(arena_alloc)),
+        .Shell => allocator.dupe(u8, fetch.getShell(arena_alloc)),
+        .Terminal => allocator.dupe(u8, fetch.getTerminal(arena_alloc)),
+        .Resolution => allocator.dupe(u8, fetch.getResolution(arena_alloc)),
+        .DE => allocator.dupe(u8, fetch.getDE(arena_alloc)),
+        .WM => allocator.dupe(u8, fetch.getWM(arena_alloc)),
+        .Theme => allocator.dupe(u8, fetch.getTheme(arena_alloc)),
+        .CPU => allocator.dupe(u8, fetch.getCPU(arena_alloc)),
+        .GPU => allocator.dupe(u8, fetch.getGPU(arena_alloc)),
         .Memory, .Logo, .TopBar, .Colors => allocator.dupe(u8, ""),
     } catch "Fetch Error";
 }
