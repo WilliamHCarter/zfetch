@@ -199,7 +199,19 @@ fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsKernel() ![]const u8 {
-    return "TODO";
+    var info: std.os.windows.OSVERSIONINFOW = undefined;
+    info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
+    
+    if (std.os.windows.kernel32.RtlGetVersion(&info) != std.os.windows.STATUS_SUCCESS) {
+        return "Unknown";
+    }
+
+    return try std.fmt.allocPrint(allocator, "Windows NT {d}.{d}.{d} Build {d}", .{
+        info.dwMajorVersion,
+        info.dwMinorVersion,
+        info.dwBuildNumber,
+        info.dwPlatformId,
+    });
 }
 
 //================= Fetch CPU =================
