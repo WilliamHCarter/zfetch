@@ -134,6 +134,7 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
     const result = try switch (getKernelType()) {
         .Linux => linuxDevice(),
         .Darwin => darwinDevice(allocator),
+				.Windows => windowsDevice(allocator),
         else => return error.UnknownDevice,
     };
 
@@ -171,6 +172,26 @@ fn linuxDevice() ![]const u8 {
 
 fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
     return host.getHost(allocator);
+}
+
+fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
+    var system_info: c.SYSTEM_INFO = undefined;
+    c.GetSystemInfo(&system_info);
+
+    const name = getNameFromProcessorArchitecture(system_info.wProcessorArchitecture) orelse "Unknown";
+    return try std.fmt.allocPrint(allocator, "Windows Device with Processor Architecture: {s}", .{name});
+}
+
+fn getNameFromProcessorArchitecture(arch: c.WORD) ?[]const u8 {
+    switch (arch) {
+        c.PROCESSOR_ARCHITECTURE_AMD64 => return "x64 (AMD or Intel)",
+        c.PROCESSOR_ARCHITECTURE_ARM => return "ARM",
+        c.PROCESSOR_ARCHITECTURE_ARM64 => return "ARM64",
+        c.PROCESSOR_ARCHITECTURE_IA64 => return "Intel Itanium-based",
+        c.PROCESSOR_ARCHITECTURE_INTEL => return "x86",
+        c.PROCESSOR_ARCHITECTURE_UNKNOWN => return "Unknown",
+        else => return null,
+    }
 }
 
 //================= Fetch Kernel =================
