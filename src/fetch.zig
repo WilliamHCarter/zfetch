@@ -297,8 +297,18 @@ fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.physmem" }, "Unknown");
 }
 
-fn windowsMemory() ![]const u8 {
-    return "TODO";
+fn windowsMemory(allocator: std.mem.Allocator) ![]const u8 {
+    var memory_status: c.MEMORYSTATUSEX = undefined;
+    memory_status.dwLength = @sizeOf(c.MEMORYSTATUSEX);
+    if (c.GlobalMemoryStatusEx(&memory_status) == 0) {
+        return error.MemoryStatusFailed;
+    }
+
+    const totalPhysMB = memory_status.ullTotalPhys / (1024 * 1024);
+    const availPhysMB = memory_status.ullAvailPhys / (1024 * 1024);
+    const usedPhysMB = totalPhysMB - availPhysMB;
+
+    return std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhysMB, totalPhysMB });
 }
 
 //================= Fetch Uptime =================
