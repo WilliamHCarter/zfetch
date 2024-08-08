@@ -534,7 +534,7 @@ pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxResolution(allocator),
         .Darwin => darwinResolution(allocator),
         .BSD => bsdResolution(allocator),
-        .Windows => windowsResolution(),
+        .Windows => windowsResolution(allocator),
         .Unknown => return error.UnknownResolution,
     };
     return allocator.dupe(u8, result);
@@ -552,8 +552,16 @@ fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
 }
 
-fn windowsResolution() ![]const u8 {
-    return "TODO";
+fn windowsResolution(allocator: std.mem.Allocator) ![]const u8 {
+    const hdc = c.GetDC(null);
+    if (hdc == null) return error.FailedToGetDC;
+
+    const width = c.GetDeviceCaps(hdc, c.HORZRES);
+    const height = c.GetDeviceCaps(hdc, c.VERTRES);
+
+    _ = c.ReleaseDC(null, hdc);
+
+    return std.fmt.allocPrint(allocator, "{d} x {d}", .{ width, height });
 }
 
 //================= Fetch DE =================
