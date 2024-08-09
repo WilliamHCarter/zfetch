@@ -14,6 +14,12 @@ const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
+
+const c = @cImport({
+    @cInclude("windows.h");
+    @cInclude("sysinfoapi.h");
+    @cInclude("psapi.h");
+});
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -74,7 +80,7 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxOS(),
         .Darwin => darwinOS(allocator),
         .BSD => bsdOS(allocator),
-        .Windows => windowsOS(),
+        .Windows => windowsOS(allocator),
         .Unknown => return error.UnknownOS,
     };
 
@@ -111,22 +117,20 @@ fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
-fn windowsOS() ![]const u8 {
-    // const stdout = std.io.getStdOut().writer();
-    // var info: std.os.windows.OSVERSIONINFOW = undefined;
-    // info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
+pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
+    var info: c.OSVERSIONINFOEXW = undefined;
+    info.dwOSVersionInfoSize = @sizeOf(c.OSVERSIONINFOEXW);
 
-    // if (std.os.windows.ntdll.RtlGetVersion(&info) != .SUCCESS) {
-    //     try stdout.writeAll("Failed to retrieve Windows version information\n");
-    //     return "Windows";
-    // }
+    const rtl_result = c.RtlGetVersion(&info);
+    if (rtl_result != 0) {
+        return error.FailedToGetVersion;
+    }
 
-    // const os_string = try std.fmt.allocPrint(allocator, "Windows {d}.{d}", .{
-    //     info.dwMajorVersion,
-    //     info.dwMinorVersion,
-    // });
-    // return os_string;
-    return "Windows";
+    return std.fmt.allocPrint(allocator, "Windows {d}.{d} (Build {d})", .{
+        info.dwMajorVersion,
+        info.dwMinorVersion,
+        info.dwBuildNumber,
+    });
 }
 
 //================= Fetch Host Device =================
