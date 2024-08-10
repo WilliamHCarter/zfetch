@@ -245,7 +245,7 @@ pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxCPU(allocator),
         .Darwin => darwinCPU(allocator),
         .BSD => bsdCPU(allocator),
-        .Windows => windowsCPU(),
+        .Windows => windowsCPU(allocator),
         .Unknown => return error.UnknownCPU,
     };
 
@@ -264,14 +264,40 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "hw.model" }, "Unknown");
 }
 
-fn windowsCPU() ![]const u8 {
-    // const stdout = std.io.getStdOut().writer();
-    // var info: std.os.windows.SYSTEM_INFO = undefined;
-    // std.os.windows.kernel32.GetSystemInfo(&info);
+fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
+    var info: c.SYSTEM_INFO = undefined;
+    c.GetSystemInfo(&info);
 
-    // const cpu_string = try std.fmt.allocPrint(allocator, "CPU: {d} cores", .{ info.dwNumberOfProcessors });
-    // return cpu_string;
-    return "Unknown";
+    var hKey: ?c.HKEY = null;
+    const key = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\\ProcessorNameString";
+    var buffer: [256]u8 = undefined;
+    var buffer_len: c.DWORD = @sizeOf(buffer);
+
+    const reg_result = c.RegOpenKeyExA(
+        c.HKEY_LOCAL_MACHINE,
+        key,
+        0,
+        c.KEY_READ,
+        &hKey,
+    );
+
+    if (reg_result == 0) {
+        const reg_query_result = c.RegQueryValueExA(
+            hKey,
+            null,
+            null,
+            null,
+            &buffer,
+            &buffer_len,
+        );
+
+        if (reg_query_result == 0) {
+            _ = c.RegCloseKey(hKey);
+            return std.fmt.allocPrint(allocator, "{} - {} cores", .{ buffer[0..buffer_len - 1], info.dwNumberOfProcessors });
+        }
+    }
+
+    return std.fmt.allocPrint(allocator, "CPU: {} cores", .{ info.dwNumberOfProcessors });
 }
 
 //================= Fetch Memory =================
