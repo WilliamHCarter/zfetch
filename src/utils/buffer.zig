@@ -110,8 +110,11 @@ pub const Buffer = struct {
         }
     }
 
-    pub fn addComponentRow(self: *Buffer, label: []const u8, data: []const u8) !void {
-        try self.write(self.row_count, 0, label);
+    pub fn addComponentRow(self: *Buffer, color: []const u8, label: []const u8, data: []const u8) !void {
+        const formatted_label = try std.fmt.allocPrint(self.allocator, "{s}{s}:\x1b[0m ", .{ color, label });
+        defer self.allocator.free(formatted_label);
+
+        try self.write(self.row_count, 0, formatted_label);
         try self.write(self.row_count, label.len, data);
         try self.addRow();
     }

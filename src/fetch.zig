@@ -70,19 +70,15 @@ pub fn getKernelType() KernelType {
 }
 
 fn OSSwitch(allocator: std.mem.Allocator, linux_fn: fn (std.mem.Allocator) []const u8, darwin_fn: fn (std.mem.Allocator) []const u8, bsd_fn: fn (std.mem.Allocator) []const u8, windows_fn: fn (std.mem.Allocator) []const u8) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
-
-    const result = switch (getKernelType()) {
-        .Linux => linux_fn(arena_allocator),
-        .Darwin => darwin_fn(arena_allocator),
-        .BSD => bsd_fn(arena_allocator),
-        .Windows => windows_fn(arena_allocator),
+    const result: []const u8 = switch (getKernelType()) {
+        .Linux => linux_fn(allocator),
+        .Darwin => darwin_fn(allocator),
+        .BSD => bsd_fn(allocator),
+        .Windows => windows_fn(allocator),
         .Unknown => return "Unknown",
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 //================= Fetch OS =================
@@ -121,14 +117,15 @@ fn bsdOS(allocator: std.mem.Allocator) []const u8 {
 }
 
 pub fn windowsOS(allocator: std.mem.Allocator) []const u8 {
-    // var version_info: c.OSVERSIONINFOEXW = undefined;
-    // version_info.dwOSVersionInfoSize = @sizeOf(c.OSVERSIONINFOEXW);
-    // const rtl_result = c.RtlGetVersion(&version_info);
-    // if (rtl_result != 0) {
-    //     return error.FailedToGetVersion;
+    // var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    // version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
+
+    // const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
+    // if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    //     return error.WindowsApiFailed;
     // }
 
-    // return std.fmt.allocPrint(allocator, "Windows {d}.{d} (Build {d})", .{
+    // return std.fmt.allocPrint(allocator, "Windows {d}.{d}.{d}", .{
     //     version_info.dwMajorVersion,
     //     version_info.dwMinorVersion,
     //     version_info.dwBuildNumber,
@@ -145,7 +142,7 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
         else => return error.UnknownDevice,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxDevice() ![]const u8 {
@@ -216,7 +213,7 @@ pub fn getKernel(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownKernel,
     };
 
-    return try allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxKernel(allocator: std.mem.Allocator) ![]const u8 {
@@ -258,7 +255,7 @@ pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownCPU,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -320,7 +317,7 @@ pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownMemory,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
@@ -362,7 +359,7 @@ pub fn getUptime(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownUptime,
     };
 
-    return try allocator.dupe(u8, result);
+    return result;
 }
 
 fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
@@ -451,7 +448,7 @@ pub fn getPackages(allocator: std.mem.Allocator) ![]const u8 {
         .Windows => windowsPackages(),
         .Unknown => return error.UnknownPackages,
     };
-    return try allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
@@ -491,19 +488,19 @@ const ShellType = struct {
     trim: []const u8,
 };
 
-fn shellTrim(allocator: std.mem.Allocator, shell: ShellType, version: []const u8) ![]const u8 {
+fn shellTrim(shell: ShellType, version: []const u8) ![]const u8 {
     if (std.mem.eql(u8, shell.trim, "none")) {
-        return allocator.dupe(u8, version);
+        return version;
     } else if (std.mem.eql(u8, shell.trim, "dash")) {
         if (std.mem.indexOfScalar(u8, version, '-')) |dash_index| {
-            return allocator.dupe(u8, version[0..dash_index]);
+            return version[0..dash_index];
         }
     } else if (std.mem.eql(u8, shell.trim, "ksh")) {
         var trimmed = std.mem.trim(u8, version, " KSH");
         trimmed = std.mem.trimLeft(u8, trimmed, "version ");
-        return allocator.dupe(u8, trimmed);
+        return trimmed;
     }
-    return allocator.dupe(u8, version);
+    return version;
 }
 
 pub fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
@@ -522,7 +519,7 @@ pub fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
         if (std.mem.eql(u8, shell_name, shell.name)) {
             const version = try execCommand(allocator, &.{ shell_path, "-c", shell.command }, "Unknown");
             defer allocator.free(version);
-            const trimmed_version = try shellTrim(allocator, shell, version);
+            const trimmed_version = try shellTrim(shell, version);
             defer allocator.free(trimmed_version);
             return try std.fmt.allocPrint(allocator, "{s} {s}", .{ shell_name, trimmed_version });
         }
@@ -578,7 +575,7 @@ pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
         .Windows => windowsResolution(allocator),
         .Unknown => return error.UnknownResolution,
     };
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
@@ -615,7 +612,7 @@ pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
         .Windows => windowsDE(),
         .Unknown => return error.UnknownDE,
     };
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxDE(allocator: std.mem.Allocator) ![]const u8 {
@@ -643,7 +640,7 @@ pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
         .Windows => windowsWM(),
         .Unknown => return error.UnknownWM,
     };
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
@@ -674,7 +671,7 @@ pub fn getTheme(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownTheme,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
@@ -730,7 +727,7 @@ pub fn getGPU(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownGPU,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxGPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -759,7 +756,7 @@ pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownLogo,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxLogo() ![]const u8 {
@@ -780,7 +777,7 @@ fn linuxLogo() ![]const u8 {
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/xenia.txt", .{cwd});
+    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/macos.txt", .{cwd});
     defer allocator.free(path);
     const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
     return content;
@@ -804,7 +801,7 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
         .Unknown => return error.UnknownLogo,
     };
 
-    return allocator.dupe(u8, result);
+    return result;
 }
 
 fn linuxColors() ![]const u8 {
