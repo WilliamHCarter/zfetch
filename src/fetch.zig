@@ -15,11 +15,6 @@ const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
 
-const c = @cImport({
-    @cInclude("windows.h");
-    @cInclude("sysinfoapi.h");
-    @cInclude("psapi.h");
-});
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -74,20 +69,28 @@ pub fn getKernelType() KernelType {
     };
 }
 
-//================= Fetch OS =================
-pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxOS(),
-        .Darwin => darwinOS(allocator),
-        .BSD => bsdOS(allocator),
-        .Windows => windowsOS(allocator),
-        .Unknown => return error.UnknownOS,
+fn OSSwitch(allocator: std.mem.Allocator, linux_fn: fn (std.mem.Allocator) []const u8, darwin_fn: fn (std.mem.Allocator) []const u8, bsd_fn: fn (std.mem.Allocator) []const u8, windows_fn: fn (std.mem.Allocator) []const u8) ![]const u8 {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const result = switch (getKernelType()) {
+        .Linux => linux_fn(arena_allocator),
+        .Darwin => darwin_fn(arena_allocator),
+        .BSD => bsd_fn(arena_allocator),
+        .Windows => windows_fn(arena_allocator),
+        .Unknown => return "Unknown",
     };
 
     return allocator.dupe(u8, result);
 }
 
-fn linuxOS() ![]const u8 {
+//================= Fetch OS =================
+pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
+    return OSSwitch(allocator, linuxOS, darwinOS, bsdOS, windowsOS);
+}
+
+fn linuxOS(allocator: std.mem.Allocator) []const u8 {
     // const os_release = "/etc/os-release";
     // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
     // defer file.close();
@@ -102,35 +105,35 @@ fn linuxOS() ![]const u8 {
     //     }
     // }
 
-    return "Linux";
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
 }
 
-fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
-    const os_struct = try os.parseOS(allocator);
+fn darwinOS(allocator: std.mem.Allocator) []const u8 {
+    const os_struct = os.parseOS(allocator) catch return "Macos";
     const os_name = os_struct.name;
     const os_version_name = os_struct.version;
     const os_version = os_struct.buildVersion;
-    return try std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version });
+    return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version }) catch "Macos";
 }
 
-fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
+fn bsdOS(allocator: std.mem.Allocator) []const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "BSD";
 }
 
-pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
-    var info: c.OSVERSIONINFOEXW = undefined;
-    info.dwOSVersionInfoSize = @sizeOf(c.OSVERSIONINFOEXW);
+pub fn windowsOS(allocator: std.mem.Allocator) []const u8 {
+    // var version_info: c.OSVERSIONINFOEXW = undefined;
+    // version_info.dwOSVersionInfoSize = @sizeOf(c.OSVERSIONINFOEXW);
+    // const rtl_result = c.RtlGetVersion(&version_info);
+    // if (rtl_result != 0) {
+    //     return error.FailedToGetVersion;
+    // }
 
-    const rtl_result = c.RtlGetVersion(&info);
-    if (rtl_result != 0) {
-        return error.FailedToGetVersion;
-    }
-
-    return std.fmt.allocPrint(allocator, "Windows {d}.{d} (Build {d})", .{
-        info.dwMajorVersion,
-        info.dwMinorVersion,
-        info.dwBuildNumber,
-    });
+    // return std.fmt.allocPrint(allocator, "Windows {d}.{d} (Build {d})", .{
+    //     version_info.dwMajorVersion,
+    //     version_info.dwMinorVersion,
+    //     version_info.dwBuildNumber,
+    // });
+    return std.fmt.allocPrint(allocator, "Windows", .{}) catch "windows";
 }
 
 //================= Fetch Host Device =================
@@ -138,7 +141,7 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
     const result = try switch (getKernelType()) {
         .Linux => linuxDevice(),
         .Darwin => darwinDevice(allocator),
-				.Windows => windowsDevice(allocator),
+        .Windows => windowsDevice(allocator),
         else => return error.UnknownDevice,
     };
 
@@ -146,7 +149,7 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxDevice() ![]const u8 {
- 
+
     // // Check for DMI information
     // const board_vendor = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
     // const board_name = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
@@ -179,23 +182,28 @@ fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
-    var system_info: c.SYSTEM_INFO = undefined;
-    c.GetSystemInfo(&system_info);
+    // var system_info: c.SYSTEM_INFO = undefined;
+    // c.GetSystemInfo(&system_info);
 
-    const name = getNameFromProcessorArchitecture(system_info.wProcessorArchitecture) orelse "Unknown";
+    // const name = getNameFromProcessorArchitecture(system_info.wProcessorArchitecture) orelse "Unknown";
+    const name = "windows";
     return try std.fmt.allocPrint(allocator, "Windows Device with Processor Architecture: {s}", .{name});
 }
 
-fn getNameFromProcessorArchitecture(arch: c.WORD) ?[]const u8 {
-    switch (arch) {
-        c.PROCESSOR_ARCHITECTURE_AMD64 => return "x64 (AMD or Intel)",
-        c.PROCESSOR_ARCHITECTURE_ARM => return "ARM",
-        c.PROCESSOR_ARCHITECTURE_ARM64 => return "ARM64",
-        c.PROCESSOR_ARCHITECTURE_IA64 => return "Intel Itanium-based",
-        c.PROCESSOR_ARCHITECTURE_INTEL => return "x86",
-        c.PROCESSOR_ARCHITECTURE_UNKNOWN => return "Unknown",
-        else => return null,
+fn getNameFromProcessorArchitecture(arch: []const u8) ?[]const u8 {
+    // switch (arch) {
+    //     c.PROCESSOR_ARCHITECTURE_AMD64 => return "x64 (AMD or Intel)",
+    //     c.PROCESSOR_ARCHITECTURE_ARM => return "ARM",
+    //     c.PROCESSOR_ARCHITECTURE_ARM64 => return "ARM64",
+    //     c.PROCESSOR_ARCHITECTURE_IA64 => return "Intel Itanium-based",
+    //     c.PROCESSOR_ARCHITECTURE_INTEL => return "x86",
+    //     c.PROCESSOR_ARCHITECTURE_UNKNOWN => return "Unknown",
+    //     else => return null,
+    // }
+    if (arch.len() == 0) {
+        return "Windows";
     }
+    return null;
 }
 
 //================= Fetch Kernel =================
@@ -204,7 +212,7 @@ pub fn getKernel(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxKernel(allocator),
         .Darwin => darwinKernel(allocator),
         .BSD => bsdKernel(allocator),
-        .Windows => windowsKernel(),
+        .Windows => windowsKernel(allocator),
         .Unknown => return error.UnknownKernel,
     };
 
@@ -223,20 +231,21 @@ fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown");
 }
 
-fn windowsKernel() ![]const u8 {
-    var info: std.os.windows.OSVERSIONINFOW = undefined;
-    info.dwOSVersionInfoSize = @sizeOf(std.os.windows.OSVERSIONINFOW);
-    
-    if (std.os.windows.kernel32.RtlGetVersion(&info) != std.os.windows.STATUS_SUCCESS) {
-        return "Unknown";
-    }
+fn windowsKernel(allocator: std.mem.Allocator) ![]const u8 {
+    // var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    // version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    return try std.fmt.allocPrint(allocator, "Windows NT {d}.{d}.{d} Build {d}", .{
-        info.dwMajorVersion,
-        info.dwMinorVersion,
-        info.dwBuildNumber,
-        info.dwPlatformId,
-    });
+    // const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
+    // if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    //     return error.WindowsApiFailed;
+    // }
+
+    // return std.fmt.allocPrint(allocator, "Windows NT {d}.{d}.{d}", .{
+    //     version_info.dwMajorVersion,
+    //     version_info.dwMinorVersion,
+    //     version_info.dwBuildNumber,
+    // });
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch CPU =================
@@ -265,39 +274,40 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
-    var info: c.SYSTEM_INFO = undefined;
-    c.GetSystemInfo(&info);
+    // var sys_info: c.SYSTEM_INFO = undefined;
+    // c.GetSystemInfo(&sys_info);
 
-    var hKey: ?c.HKEY = null;
-    const key = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\\ProcessorNameString";
-    var buffer: [256]u8 = undefined;
-    var buffer_len: c.DWORD = @sizeOf(buffer);
+    // var hKey: ?c.HKEY = null;
+    // const key = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\\ProcessorNameString";
+    // var buffer: [256]u8 = undefined;
+    // var buffer_len: c.DWORD = @sizeOf(buffer);
 
-    const reg_result = c.RegOpenKeyExA(
-        c.HKEY_LOCAL_MACHINE,
-        key,
-        0,
-        c.KEY_READ,
-        &hKey,
-    );
+    // const reg_result = c.RegOpenKeyExA(
+    //     c.HKEY_LOCAL_MACHINE,
+    //     key,
+    //     0,
+    //     c.KEY_READ,
+    //     &hKey,
+    // );
 
-    if (reg_result == 0) {
-        const reg_query_result = c.RegQueryValueExA(
-            hKey,
-            null,
-            null,
-            null,
-            &buffer,
-            &buffer_len,
-        );
+    // if (reg_result == 0) {
+    //     const reg_query_result = c.RegQueryValueExA(
+    //         hKey,
+    //         null,
+    //         null,
+    //         null,
+    //         &buffer,
+    //         &buffer_len,
+    //     );
 
-        if (reg_query_result == 0) {
-            _ = c.RegCloseKey(hKey);
-            return std.fmt.allocPrint(allocator, "{} - {} cores", .{ buffer[0..buffer_len - 1], info.dwNumberOfProcessors });
-        }
-    }
+    //     if (reg_query_result == 0) {
+    //         _ = c.RegCloseKey(hKey);
+    //         return std.fmt.allocPrint(allocator, "{} - {} cores", .{ buffer[0 .. buffer_len - 1], info.dwNumberOfProcessors });
+    //     }
+    // }
 
-    return std.fmt.allocPrint(allocator, "CPU: {} cores", .{ info.dwNumberOfProcessors });
+    // return std.fmt.allocPrint(allocator, "CPU: {} cores", .{info.dwNumberOfProcessors});
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch Memory =================
@@ -306,7 +316,7 @@ pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxMemory(allocator),
         .Darwin => darwinMemory(allocator),
         .BSD => bsdMemory(allocator),
-        .Windows => windowsMemory(),
+        .Windows => windowsMemory(allocator),
         .Unknown => return error.UnknownMemory,
     };
 
@@ -328,17 +338,18 @@ fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsMemory(allocator: std.mem.Allocator) ![]const u8 {
-    var memory_status: c.MEMORYSTATUSEX = undefined;
-    memory_status.dwLength = @sizeOf(c.MEMORYSTATUSEX);
-    if (c.GlobalMemoryStatusEx(&memory_status) == 0) {
-        return error.MemoryStatusFailed;
-    }
+    // var memory_status: c.MEMORYSTATUSEX = undefined;
+    // memory_status.dwLength = @sizeOf(c.MEMORYSTATUSEX);
+    // if (c.GlobalMemoryStatusEx(&memory_status) == 0) {
+    //     return error.MemoryStatusFailed;
+    // }
 
-    const totalPhysMB = memory_status.ullTotalPhys / (1024 * 1024);
-    const availPhysMB = memory_status.ullAvailPhys / (1024 * 1024);
-    const usedPhysMB = totalPhysMB - availPhysMB;
+    // const totalPhysMB = memory_status.ullTotalPhys / (1024 * 1024);
+    // const availPhysMB = memory_status.ullAvailPhys / (1024 * 1024);
+    // const usedPhysMB = totalPhysMB - availPhysMB;
 
-    return std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhysMB, totalPhysMB });
+    // return try std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhysMB, totalPhysMB });
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch Uptime =================
@@ -583,15 +594,16 @@ fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsResolution(allocator: std.mem.Allocator) ![]const u8 {
-    const hdc = c.GetDC(null);
-    if (hdc == null) return error.FailedToGetDC;
+    // const hdc = c.GetDC(null);
+    // if (hdc == null) return error.FailedToGetDC;
 
-    const width = c.GetDeviceCaps(hdc, c.HORZRES);
-    const height = c.GetDeviceCaps(hdc, c.VERTRES);
+    // const width = c.GetDeviceCaps(hdc, c.HORZRES);
+    // const height = c.GetDeviceCaps(hdc, c.VERTRES);
 
-    _ = c.ReleaseDC(null, hdc);
+    // _ = c.ReleaseDC(null, hdc);
 
-    return std.fmt.allocPrint(allocator, "{d} x {d}", .{ width, height });
+    // return std.fmt.allocPrint(allocator, "{d} x {d}", .{ width, height });
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch DE =================
@@ -768,7 +780,7 @@ fn linuxLogo() ![]const u8 {
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/macos.txt", .{cwd});
+    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/xenia.txt", .{cwd});
     defer allocator.free(path);
     const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
     return content;

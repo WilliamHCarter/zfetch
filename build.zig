@@ -14,5 +14,11 @@ pub fn build(b: *std.Build) void {
         exe.linkFramework("IOKit");
     }
 
+    // Link Windows Libraries
+    // if (builtin.os.tag == .windows) {
+    //     exe.linkSystemLibrary("kernel32");
+    //     exe.linkSystemLibrary("user32");
+    //     exe.linkSystemLibrary("psapi");
+    // }
     b.installArtifact(exe);
 }

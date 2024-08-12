@@ -206,7 +206,7 @@ pub fn render(theme: Theme) !void {
     }
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
-    // try timer.printResults(stdout);
+    try timer.printResults(stdout);
 }
 
 fn fetchWorker(
@@ -282,24 +282,26 @@ fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
-    
-    return switch (component.kind) {
-        .Username => allocator.dupe(u8, fetch.getUsername(arena_alloc)),
-        .OS => allocator.dupe(u8, fetch.getOS(arena_alloc),
-        .Hostname => allocator.dupe(u8,  fetch.getHostDevice(arena_alloc)),
-        .Kernel => allocator.dupe(u8,  fetch.getKernel(arena_alloc)),
-        .Uptime => allocator.dupe(u8,  fetch.getUptime(arena_alloc)),
-        .Packages => allocator.dupe(u8, fetch.getPackages(arena_alloc)),
-        .Shell => allocator.dupe(u8, fetch.getShell(arena_alloc)),
-        .Terminal => allocator.dupe(u8, fetch.getTerminal(arena_alloc)),
-        .Resolution => allocator.dupe(u8, fetch.getResolution(arena_alloc)),
-        .DE => allocator.dupe(u8, fetch.getDE(arena_alloc)),
-        .WM => allocator.dupe(u8, fetch.getWM(arena_alloc)),
-        .Theme => allocator.dupe(u8, fetch.getTheme(arena_alloc)),
-        .CPU => allocator.dupe(u8, fetch.getCPU(arena_alloc)),
-        .GPU => allocator.dupe(u8, fetch.getGPU(arena_alloc)),
-        .Memory, .Logo, .TopBar, .Colors => allocator.dupe(u8, ""),
+
+    const fetched_component: []const u8 = switch (component.kind) {
+        .Username => fetch.getUsername(arena_alloc),
+        .OS => fetch.getOS(arena_alloc),
+        .Hostname => fetch.getHostDevice(arena_alloc),
+        .Kernel => fetch.getKernel(arena_alloc),
+        .Uptime => fetch.getUptime(arena_alloc),
+        .Packages => fetch.getPackages(arena_alloc),
+        .Shell => fetch.getShell(arena_alloc),
+        .Terminal => fetch.getTerminal(arena_alloc),
+        .Resolution => fetch.getResolution(arena_alloc),
+        .DE => fetch.getDE(arena_alloc),
+        .WM => fetch.getWM(arena_alloc),
+        .Theme => fetch.getTheme(arena_alloc),
+        .CPU => fetch.getCPU(arena_alloc),
+        .GPU => fetch.getGPU(arena_alloc),
+        .Memory, .Logo, .TopBar, .Colors => "",
     } catch "Fetch Error";
+
+    return allocator.dupe(u8, fetched_component) catch "Fetch Error";
 }
 
 //=========================== Memory Rendering ===========================
@@ -380,63 +382,44 @@ const LogoPosition = enum {
     Inline,
 };
 
-fn getMaxWidth(ascii_art: []const u8) usize {
-    var max: usize = 0;
-    var lines = std.mem.split(u8, ascii_art, "\n");
-    while (lines.next()) |line| {
-        var visual_length: usize = 0;
-        var i: usize = 0;
-        while (i < line.len) {
-            if (line[i] == '$' and i + 1 < line.len) {
-                if (line[i + 1] == '{' and i + 4 < line.len and line[i + 4] == '}') {
-                    // Skip ${c#} format
-                    i += 5;
-                } else if (line[i + 1] >= '0' and line[i + 1] <= '9') {
-                    // Skip $# format
-                    i += 2;
-                } else {
-                    visual_length += 1;
-                    i += 1;
-                }
-            } else {
-                visual_length += 1;
-                i += 1;
-            }
-        }
-        max = @max(max, visual_length);
+fn processLine(line: []const u8, allocator: std.mem.Allocator, color_map: ColorMap) ![]const u8 {
+    var result = try allocator.dupe(u8, line);
+    errdefer allocator.free(result);
+
+    for (color_map.codes, 0..) |color_code, i| {
+        const single_digit = try std.fmt.allocPrint(allocator, "${d}", .{i});
+        defer allocator.free(single_digit);
+        result = try std.mem.replaceOwned(u8, allocator, result, single_digit, color_code);
+
+        const curly_brace = try std.fmt.allocPrint(allocator, "${{c{d}}}", .{i});
+        defer allocator.free(curly_brace);
+        result = try std.mem.replaceOwned(u8, allocator, result, curly_brace, color_code);
     }
-    return max;
+
+    return result;
 }
 
-fn getLineWidths(ascii_art: []const u8) ![]usize {
-    var widths = std.ArrayList(usize).init(std.heap.page_allocator);
+fn getLineWidths(ascii_art: []const u8, allocator: std.mem.Allocator) ![]usize {
+    var widths = std.ArrayList(usize).init(allocator);
     errdefer widths.deinit();
 
     var lines = std.mem.split(u8, ascii_art, "\n");
     while (lines.next()) |line| {
-        var visual_length: usize = 0;
-        var i: usize = 0;
-        while (i < line.len) {
-            if (line[i] == '$' and i + 1 < line.len) {
-                if (line[i + 1] == '{' and i + 4 < line.len and line[i + 4] == '}') {
-                    // Skip ${c#} format
-                    i += 5;
-                } else if (line[i + 1] >= '0' and line[i + 1] <= '9') {
-                    // Skip $# format
-                    i += 2;
-                } else {
-                    visual_length += 1;
-                    i += 1;
-                }
-            } else {
-                visual_length += 1;
-                i += 1;
-            }
-        }
+        const result = processLine(line, allocator, undefined) catch line;
+        const visual_length: usize = result.len;
         try widths.append(visual_length);
     }
 
     return widths.toOwnedSlice();
+}
+
+fn getMaxWidth(ascii_art: []const u8, allocator: std.mem.Allocator) usize {
+    const lines = getLineWidths(ascii_art, allocator) catch return 0;
+    var max = lines[0];
+    for (lines) |value| {
+        max = @max(max, value);
+    }
+    return max;
 }
 
 fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: ColorMap) ![]u8 {
@@ -499,10 +482,10 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
     const ascii_art_color = try colorize(allocator, ascii_art, color_map);
     defer allocator.free(ascii_art_color);
 
-    const logo_width = getMaxWidth(ascii_art);
+    const logo_width = getMaxWidth(ascii_art, allocator);
     std.debug.print("Logo width: {}\n", .{logo_width});
-    const line_widths = try getLineWidths(ascii_art_color);
-    const visual_line_widths = try getLineWidths(ascii_art);
+    const line_widths = try getLineWidths(ascii_art_color, allocator);
+    const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, "\n");
     const ascii_height = std.mem.count(u8, ascii_art_color, "\n") + 1;
 
