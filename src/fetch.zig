@@ -174,7 +174,7 @@ fn linuxDevice() ![]const u8 {
     return "Unknown";
 }
 
-fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
+fn darwinDevice(allocator: std.mem.Allocator) []const u8 {
     return host.getHost(allocator);
 }
 

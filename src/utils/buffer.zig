@@ -115,7 +115,7 @@ pub const Buffer = struct {
         defer self.allocator.free(formatted_label);
 
         try self.write(self.row_count, 0, formatted_label);
-        try self.write(self.row_count, label.len, data);
+        try self.write(self.row_count, formatted_label.len, data);
         try self.addRow();
     }
 };

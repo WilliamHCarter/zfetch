@@ -4,8 +4,8 @@ const c = @cImport({
 });
 const info = @import("../info.zig");
 
-pub fn getHost(allocator: std.mem.Allocator) ![]const u8 {
-    const model = try sysctlGetString(allocator, "hw.model");
+pub fn getHost(allocator: std.mem.Allocator) []const u8 {
+    const model = sysctlGetString(allocator, "hw.model") catch "Fetch Error";
     defer allocator.free(model);
 
     const name = getNameFromHwModel(model) orelse model;

@@ -191,6 +191,8 @@ pub fn render(theme: Theme) !void {
         thread.join();
     }
 
+    const start_time = try timer.startLap("render");
+
     std.sort.block(FetchResult, results.items, theme, componentOrder);
     var logo: ?Component = undefined;
     for (results.items) |result| {
@@ -206,6 +208,7 @@ pub fn render(theme: Theme) !void {
     }
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
+    try timer.endLap("render", start_time);
     try timer.printResults(stdout);
 }
 
@@ -256,7 +259,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     const allocator = arena.allocator();
 
     switch (component.kind) {
-        .Username => try buffer.addComponentRow(Colors.Secondary, fetched_result, ""),
+        .Username => try buffer.addComponentRow(Colors.Secondary, fetched_result, " "),
         .OS => try buffer.addComponentRow(Colors.Primary, "OS", fetched_result),
         .Hostname => try buffer.addComponentRow(Colors.Primary, "Host", fetched_result),
         .Kernel => try buffer.addComponentRow(Colors.Primary, "Kernel", fetched_result),
@@ -370,6 +373,23 @@ fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
         },
     }
     return memory;
+}
+
+fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
+    const colors = try fetch.getColors(allocator);
+    var color_lines = std.mem.split(u8, colors, "\n");
+    const first_line = color_lines.next() orelse return error.InvalidColorFile;
+    const second_line = color_lines.next() orelse return error.InvalidColorFile;
+    try buffer.write(buffer.getCurrentRow(), 0, first_line);
+    try buffer.addRow();
+    try buffer.write(buffer.getCurrentRow(), 0, second_line);
+    try buffer.addRow();
+}
+
+fn renderTopBar(buffer: *buf.Buffer) !void {
+    const top_bar = "-------------------------------------";
+    try buffer.write(buffer.getCurrentRow(), 0, top_bar);
+    try buffer.addRow();
 }
 
 //=========================== Logo Rendering ===========================
@@ -509,7 +529,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
         .Left => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                var curr_line = try std.heap.page_allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();
                 }
@@ -519,7 +539,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
                 row += 1;
             }
             while (row < buffer.getCurrentRow()) {
-                var blank_width = try std.heap.page_allocator.alloc(u8, logo_width + 3);
+                var blank_width = try allocator.alloc(u8, logo_width + 3);
                 for (blank_width) |*c| {
                     c.* = ' ';
                 }
@@ -549,21 +569,4 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
             }
         },
     }
-}
-
-fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const colors = try fetch.getColors(allocator);
-    var color_lines = std.mem.split(u8, colors, "\n");
-    const first_line = color_lines.next() orelse return error.InvalidColorFile;
-    const second_line = color_lines.next() orelse return error.InvalidColorFile;
-    try buffer.write(buffer.getCurrentRow(), 0, first_line);
-    try buffer.addRow();
-    try buffer.write(buffer.getCurrentRow(), 0, second_line);
-    try buffer.addRow();
-}
-
-fn renderTopBar(buffer: *buf.Buffer) !void {
-    const top_bar = "-------------------------------------";
-    try buffer.write(buffer.getCurrentRow(), 0, top_bar);
-    try buffer.addRow();
 }
