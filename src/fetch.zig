@@ -811,18 +811,18 @@ fn linuxColors() ![]const u8 {
 fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
-
-    var i: u8 = 0;
-    while (i < 8) : (i += 1) {
-        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[4{d}m   \x1b[0m", .{i}));
-    }
-
     try result.append('\n');
 
-    i = 0;
-    while (i < 8) : (i += 1) {
-        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[10{d}m   \x1b[0m", .{i}));
+    for (0..8) |i| {
+        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[4{d}m   ", .{i}));
     }
+    try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[0m", .{}));
+
+    try result.append('\n');
+    for (0..8) |i| {
+        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[10{d}m   ", .{i}));
+    }
+    try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[0m", .{}));
 
     return result.toOwnedSlice();
 }

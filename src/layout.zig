@@ -167,7 +167,7 @@ pub fn render(theme: Theme) !void {
         results.deinit();
     }
 
-    var buffer = try buf.Buffer.init(allocator, 50, 100);
+    var buffer = try buf.Buffer.init(allocator, 50, 150);
     defer buffer.deinit();
 
     var mutex = std.Thread.Mutex{};
@@ -380,9 +380,12 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     var color_lines = std.mem.split(u8, colors, "\n");
     const first_line = color_lines.next() orelse return error.InvalidColorFile;
     const second_line = color_lines.next() orelse return error.InvalidColorFile;
+    const third_line = color_lines.next() orelse return error.InvalidColorFile;
     try buffer.write(buffer.getCurrentRow(), 0, first_line);
     try buffer.addRow();
     try buffer.write(buffer.getCurrentRow(), 0, second_line);
+    try buffer.addRow();
+    try buffer.write(buffer.getCurrentRow(), 0, third_line);
     try buffer.addRow();
 }
 
