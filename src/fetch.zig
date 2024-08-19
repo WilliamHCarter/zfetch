@@ -69,15 +69,14 @@ pub fn getKernelType() KernelType {
     };
 }
 
-fn OSSwitch(allocator: std.mem.Allocator, linux_fn: fn (std.mem.Allocator) []const u8, darwin_fn: fn (std.mem.Allocator) []const u8, bsd_fn: fn (std.mem.Allocator) []const u8, windows_fn: fn (std.mem.Allocator) []const u8) ![]const u8 {
-    const result: []const u8 = switch (getKernelType()) {
-        .Linux => linux_fn(allocator),
-        .Darwin => darwin_fn(allocator),
-        .BSD => bsd_fn(allocator),
-        .Windows => windows_fn(allocator),
-        .Unknown => return "Unknown",
+fn OSSwitch(allocator: std.mem.Allocator, linux_fn: fn (std.mem.Allocator) anyerror![]const u8, darwin_fn: fn (std.mem.Allocator) anyerror![]const u8, bsd_fn: fn (std.mem.Allocator) anyerror![]const u8, windows_fn: fn (std.mem.Allocator) anyerror![]const u8) ![]const u8 {
+    const result: anyerror![]const u8 = switch (builtin.os.tag) {
+        .linux => linux_fn(allocator),
+        .macos => darwin_fn(allocator),
+        .freebsd, .openbsd, .netbsd, .dragonfly => bsd_fn(allocator),
+        .windows => windows_fn(allocator),
+        else => return error.UnsupportedOS,
     };
-
     return result;
 }
 
@@ -86,7 +85,7 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxOS, darwinOS, bsdOS, windowsOS);
 }
 
-fn linuxOS(allocator: std.mem.Allocator) []const u8 {
+fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
     // const os_release = "/etc/os-release";
     // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
     // defer file.close();
@@ -104,7 +103,7 @@ fn linuxOS(allocator: std.mem.Allocator) []const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
 }
 
-fn darwinOS(allocator: std.mem.Allocator) []const u8 {
+fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
     const os_struct = os.parseOS(allocator) catch return "Macos";
     const os_name = os_struct.name;
     const os_version_name = os_struct.version;
@@ -112,40 +111,32 @@ fn darwinOS(allocator: std.mem.Allocator) []const u8 {
     return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version }) catch "Macos";
 }
 
-fn bsdOS(allocator: std.mem.Allocator) []const u8 {
+fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "BSD";
 }
 
-pub fn windowsOS(allocator: std.mem.Allocator) []const u8 {
-    // var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
-    // version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
+pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
+    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    // const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    // if (status != std.os.windows.NTSTATUS.SUCCESS) {
-    //     return error.WindowsApiFailed;
-    // }
+    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
+    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+        return error.WindowsApiFailed;
+    }
 
-    // return std.fmt.allocPrint(allocator, "Windows {d}.{d}.{d}", .{
-    //     version_info.dwMajorVersion,
-    //     version_info.dwMinorVersion,
-    //     version_info.dwBuildNumber,
-    // });
-    return std.fmt.allocPrint(allocator, "Windows", .{}) catch "windows";
+    return std.fmt.allocPrint(allocator, "Windows {d}.{d}.{d}", .{
+        version_info.dwMajorVersion,
+        version_info.dwMinorVersion,
+        version_info.dwBuildNumber,
+    });
 }
 
 //================= Fetch Host Device =================
 pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxDevice(),
-        .Darwin => darwinDevice(allocator),
-        .Windows => windowsDevice(allocator),
-        else => return error.UnknownDevice,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxDevice, darwinDevice, bsdDevice, windowsDevice);
 }
 
-fn linuxDevice() ![]const u8 {
+fn linuxDevice(allocator: std.mem.Allocator) ![]const u8 {
 
     // // Check for DMI information
     // const board_vendor = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
@@ -171,11 +162,15 @@ fn linuxDevice() ![]const u8 {
     //     return tmp_model;
     // }
 
-    return "Unknown";
+    return execCommand(allocator, &[_][]const u8{ "uname", "-m" }, "Unknown");
 }
 
-fn darwinDevice(allocator: std.mem.Allocator) []const u8 {
+fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
     return host.getHost(allocator);
+}
+
+fn bsdDevice(allocator: std.mem.Allocator) ![]const u8 {
+    return execCommand(allocator, &[_][]const u8{ "uname", "-m" }, "Unknown");
 }
 
 fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
@@ -205,15 +200,7 @@ fn getNameFromProcessorArchitecture(arch: []const u8) ?[]const u8 {
 
 //================= Fetch Kernel =================
 pub fn getKernel(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxKernel(allocator),
-        .Darwin => darwinKernel(allocator),
-        .BSD => bsdKernel(allocator),
-        .Windows => windowsKernel(allocator),
-        .Unknown => return error.UnknownKernel,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxKernel, darwinKernel, bsdKernel, windowsKernel);
 }
 
 fn linuxKernel(allocator: std.mem.Allocator) ![]const u8 {
@@ -229,33 +216,24 @@ fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsKernel(allocator: std.mem.Allocator) ![]const u8 {
-    // var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
-    // version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
+    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    // const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    // if (status != std.os.windows.NTSTATUS.SUCCESS) {
-    //     return error.WindowsApiFailed;
-    // }
+    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
+    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+        return error.WindowsApiFailed;
+    }
 
-    // return std.fmt.allocPrint(allocator, "Windows NT {d}.{d}.{d}", .{
-    //     version_info.dwMajorVersion,
-    //     version_info.dwMinorVersion,
-    //     version_info.dwBuildNumber,
-    // });
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    return std.fmt.allocPrint(allocator, "Windows NT {d}.{d}.{d}", .{
+        version_info.dwMajorVersion,
+        version_info.dwMinorVersion,
+        version_info.dwBuildNumber,
+    });
 }
 
 //================= Fetch CPU =================
 pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxCPU(allocator),
-        .Darwin => darwinCPU(allocator),
-        .BSD => bsdCPU(allocator),
-        .Windows => windowsCPU(allocator),
-        .Unknown => return error.UnknownCPU,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxCPU, darwinCPU, bsdCPU, windowsCPU);
 }
 
 fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -309,15 +287,7 @@ fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Memory =================
 pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxMemory(allocator),
-        .Darwin => darwinMemory(allocator),
-        .BSD => bsdMemory(allocator),
-        .Windows => windowsMemory(allocator),
-        .Unknown => return error.UnknownMemory,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxMemory, darwinMemory, bsdMemory, windowsMemory);
 }
 
 fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
@@ -351,15 +321,7 @@ fn windowsMemory(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Uptime =================
 pub fn getUptime(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxUptime(allocator),
-        .Darwin => darwinUptime(allocator),
-        .BSD => bsdUptime(allocator),
-        .Windows => windowsUptime(),
-        .Unknown => return error.UnknownUptime,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxUptime, darwinUptime, bsdUptime, windowsUptime);
 }
 
 fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
@@ -435,20 +397,13 @@ fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
     return formatUptime(allocator, uptime_seconds);
 }
 
-fn windowsUptime() ![]const u8 {
-    return "TODO";
+fn windowsUptime(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch Packages =================
 pub fn getPackages(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxPackages(allocator),
-        .Darwin => darwinPackages(allocator),
-        .BSD => bsdPackages(allocator),
-        .Windows => windowsPackages(),
-        .Unknown => return error.UnknownPackages,
-    };
-    return result;
+    return OSSwitch(allocator, linuxPackages, darwinPackages, bsdPackages, windowsPackages);
 }
 
 fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
@@ -463,19 +418,13 @@ fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
     return try execCommand(allocator, &[_][]const u8{ "pkg", "info" }, "Unknown");
 }
 
-fn windowsPackages() ![]const u8 {
-    return "TODO";
+fn windowsPackages(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "Windows", .{});
 }
 
 //================= Fetch Shell =================
 pub fn getShell(allocator: std.mem.Allocator) ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxShell(allocator),
-        .Darwin => darwinShell(allocator),
-        .BSD => bsdShell(allocator),
-        .Windows => windowsShell(allocator),
-        .Unknown => return error.UnknownShell,
-    };
+    return OSSwitch(allocator, linuxShell, darwinShell, bsdShell, windowsShell);
 }
 
 fn linuxShell(allocator: std.mem.Allocator) ![]const u8 {
@@ -541,13 +490,7 @@ fn windowsShell(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Terminal =================
 pub fn getTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return switch (getKernelType()) {
-        .Linux => linuxTerminal(allocator),
-        .Darwin => darwinTerminal(allocator),
-        .BSD => bsdTerminal(allocator),
-        .Windows => windowsTerminal(allocator),
-        .Unknown => return error.UnknownTerminal,
-    };
+    return OSSwitch(allocator, linuxTerminal, darwinTerminal, bsdTerminal, windowsTerminal);
 }
 
 fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
@@ -568,14 +511,7 @@ fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch Resolution =================
 pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxResolution(allocator),
-        .Darwin => darwinResolution(allocator),
-        .BSD => bsdResolution(allocator),
-        .Windows => windowsResolution(allocator),
-        .Unknown => return error.UnknownResolution,
-    };
-    return result;
+    return OSSwitch(allocator, linuxResolution, darwinResolution, bsdResolution, windowsResolution);
 }
 
 fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
@@ -633,14 +569,7 @@ fn windowsDE() ![]const u8 {
 
 //================= Fetch WM =================
 pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxWM(allocator),
-        .Darwin => darwinWM(allocator),
-        .BSD => bsdWM(allocator),
-        .Windows => windowsWM(),
-        .Unknown => return error.UnknownWM,
-    };
-    return result;
+    return OSSwitch(allocator, linuxWM, darwinWM, bsdWM, windowsWM);
 }
 
 fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
@@ -657,21 +586,13 @@ fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
-fn windowsWM() ![]const u8 {
-    return "TODO";
+fn windowsWM(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 //================= Fetch Theme =================
 pub fn getTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxTheme(allocator),
-        .Darwin => darwinTheme(allocator),
-        .BSD => bsdTheme(allocator),
-        .Windows => windowsTheme(),
-        .Unknown => return error.UnknownTheme,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxTheme, darwinTheme, bsdTheme, windowsTheme);
 }
 
 fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
@@ -713,21 +634,13 @@ fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
 }
 
-fn windowsTheme() ![]const u8 {
-    return "TODO";
+fn windowsTheme(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 //================= Fetch GPU =================
 pub fn getGPU(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxGPU(allocator),
-        .Darwin => darwinGPU(allocator),
-        .BSD => bsdGPU(allocator),
-        .Windows => windowsGPU(),
-        .Unknown => return error.UnknownGPU,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxGPU, darwinGPU, bsdGPU, windowsGPU);
 }
 
 fn linuxGPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -742,24 +655,16 @@ fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
 }
 
-fn windowsGPU() ![]const u8 {
-    return "TODO";
+fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 //================= Fetch Logo =================
 pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxLogo(),
-        .Darwin => darwinLogo(allocator),
-        .BSD => bsdLogo(),
-        .Windows => windowsLogo(),
-        .Unknown => return error.UnknownLogo,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
 }
 
-fn linuxLogo() ![]const u8 {
+fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
     // const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
     //     std.debug.print("Error executing command: {}\n", .{err});
     //     return "Unknown Linux Distro";
@@ -771,7 +676,7 @@ fn linuxLogo() ![]const u8 {
     //     idx += 1;
     // }
     // return os_name_lower;
-    return "Linux TODO";
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
@@ -783,29 +688,21 @@ fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
     return content;
 }
 
-fn bsdLogo() ![]const u8 {
-    return "TODO";
+fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
-fn windowsLogo() ![]const u8 {
-    return "TODO";
+fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 //================= Fetch Colors =================
 pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxColors(),
-        .Darwin => darwinColors(allocator),
-        .BSD => bsdColors(),
-        .Windows => windowsColors(),
-        .Unknown => return error.UnknownLogo,
-    };
-
-    return result;
+    return OSSwitch(allocator, linuxColors, darwinColors, bsdColors, windowsColors);
 }
 
-fn linuxColors() ![]const u8 {
-    return "TODO";
+fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
@@ -827,12 +724,12 @@ fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
     return result.toOwnedSlice();
 }
 
-fn bsdColors() ![]const u8 {
-    return "TODO";
+fn bsdColors(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
-fn windowsColors() ![]const u8 {
-    return "TODO";
+fn windowsColors(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "TODO");
 }
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
