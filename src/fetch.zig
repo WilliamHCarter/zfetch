@@ -587,7 +587,7 @@ fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsWM(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 //================= Fetch Theme =================
@@ -635,7 +635,7 @@ fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 //================= Fetch GPU =================
@@ -656,7 +656,7 @@ fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 //================= Fetch Logo =================
@@ -676,7 +676,7 @@ fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
     //     idx += 1;
     // }
     // return os_name_lower;
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
@@ -689,11 +689,11 @@ fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 //================= Fetch Colors =================
@@ -702,7 +702,7 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
@@ -725,11 +725,11 @@ fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn bsdColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 fn windowsColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO");
+    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
 }
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
@@ -738,6 +738,24 @@ pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
 
     var hostname_buffer: [std.posix.HOST_NAME_MAX]u8 = undefined;
     const hostname = try std.posix.gethostname(&hostname_buffer);
+
+    return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
+}
+
+pub fn getUsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
+    var username_buffer: [std.os.windows.UNLEN + 1]u16 = undefined;
+    var username_size: std.os.windows.DWORD = std.os.windows.UNLEN + 1;
+    if (std.os.windows.GetUserNameW(&username_buffer, &username_size) == 0) {
+        return std.os.windows.GetLastError();
+    }
+    const username = try std.unicode.utf16leToUtf8Alloc(allocator, username_buffer[0 .. username_size - 1]);
+
+    var hostname_buffer: [std.os.windows.MAX_COMPUTERNAME_LENGTH + 1]u16 = undefined;
+    var hostname_size: std.os.windows.DWORD = std.os.windows.MAX_COMPUTERNAME_LENGTH + 1;
+    if (std.os.windows.GetComputerNameW(&hostname_buffer, &hostname_size) == 0) {
+        return std.os.windows.GetLastError();
+    }
+    const hostname = try std.unicode.utf16leToUtf8Alloc(allocator, hostname_buffer[0..hostname_size]);
 
     return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }
