@@ -733,6 +733,10 @@ fn windowsColors(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
+    return OSSwitch(allocator, UsernamePosix, UsernamePosix, UsernamePosix, UsernameWindows);
+}
+
+pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
     const username = fetchEnvVar(allocator, "USER");
     defer allocator.free(username);
 
@@ -742,7 +746,7 @@ pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
     return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }
 
-pub fn getUsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
+pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
     var username_buffer: [std.os.windows.UNLEN + 1]u16 = undefined;
     var username_size: std.os.windows.DWORD = std.os.windows.UNLEN + 1;
     if (std.os.windows.GetUserNameW(&username_buffer, &username_size) == 0) {
