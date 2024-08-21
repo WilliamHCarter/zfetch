@@ -701,11 +701,7 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxColors, darwinColors, bsdColors, windowsColors);
 }
 
-fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
-}
-
-fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
+fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
     try result.append('\n');
@@ -724,12 +720,20 @@ fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
     return result.toOwnedSlice();
 }
 
+fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
+    return ansiColors(allocator);
+}
+
+fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
+    return ansiColors(allocator);
+}
+
 fn bsdColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    return ansiColors(allocator);
 }
 
 fn windowsColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    return ansiColors(allocator);
 }
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
@@ -748,7 +752,7 @@ pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
 
 pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
     const username = fetchEnvVar(allocator, "USER");
-    defer allocator.free(username);
+    //defer allocator.free(username);
 
     return try std.fmt.allocPrint(allocator, "{s}", .{username});
 }
