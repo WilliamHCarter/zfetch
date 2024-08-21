@@ -79,7 +79,8 @@ pub const Buffer = struct {
 
     pub fn render(self: *const Buffer, writer: anytype) !void {
         for (self.lines.items[0..self.row_count]) |line| {
-            try writer.print("{s}\n", .{line});
+            const trimmed_line = std.mem.trimRight(u8, line, " ");
+            try writer.print("{s}\n", .{trimmed_line});
         }
     }
 
