@@ -15,10 +15,11 @@ pub fn build(b: *std.Build) void {
     }
 
     // Link Windows Libraries
-    // if (builtin.os.tag == .windows) {
-    //     exe.linkSystemLibrary("kernel32");
-    //     exe.linkSystemLibrary("user32");
-    //     exe.linkSystemLibrary("psapi");
-    // }
+    if (builtin.os.tag == .windows) {
+        exe.linkLibC();
+        exe.linkSystemLibrary("kernel32");
+        // exe.linkSystemLibrary("user32");
+        // exe.linkSystemLibrary("psapi");
+    }
     b.installArtifact(exe);
 }

@@ -122,7 +122,6 @@ fn parseTheme(content: []const u8) !Theme {
         if (trimmed.len == 0) continue;
 
         if (std.mem.startsWith(u8, trimmed, "<") and std.mem.endsWith(u8, trimmed, ">")) {
-            std.debug.print("Parsed component: {s}\n", .{trimmed});
             const component = try parseComponent(trimmed[1 .. trimmed.len - 1]);
             try theme.components.append(component);
         }
@@ -263,7 +262,6 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     var arena = std.heap.ArenaAllocator.init(buffer.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    std.debug.print("rendering component: {s}\n", .{@tagName(component.kind)});
     switch (component.kind) {
         .Username => try buffer.addComponentRow(Colors.Secondary, fetched_result, " "),
         .OS => try buffer.addComponentRow(Colors.Primary, "OS", fetched_result),

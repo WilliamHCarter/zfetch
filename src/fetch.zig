@@ -14,7 +14,9 @@ const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
-
+const windows = @cImport({
+    @cInclude("windows.h");
+});
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -352,7 +354,6 @@ fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
 fn getBootTime(allocator: std.mem.Allocator) !i64 {
     const output = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
     defer allocator.free(output);
-
     var iter = std.mem.split(u8, output, "=");
     _ = iter.next();
     const boot_time_str = iter.next() orelse return error.BootTimeNotFound;
@@ -398,7 +399,10 @@ fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsUptime(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    const uptime_milliseconds = windows.GetTickCount64();
+    const uptime_seconds: u64 = uptime_milliseconds / 1000;
+
+    return formatUptime(allocator, uptime_seconds);
 }
 
 //================= Fetch Packages =================
