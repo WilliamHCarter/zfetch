@@ -14,7 +14,8 @@ const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
-const windows = @cImport({
+const windows = std.os.windows;
+const cwin = @cImport({
     @cInclude("windows.h");
 });
 //================= Helper Functions =================
@@ -118,11 +119,11 @@ fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
-    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    var version_info: windows.RTL_OSVERSIONINFOW = undefined;
     version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    const status = windows.ntdll.RtlGetVersion(&version_info);
+    if (status != windows.NTSTATUS.SUCCESS) {
         return error.WindowsApiFailed;
     }
 
@@ -218,11 +219,11 @@ fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsKernel(allocator: std.mem.Allocator) ![]const u8 {
-    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    var version_info: windows.RTL_OSVERSIONINFOW = undefined;
     version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    const status = windows.ntdll.RtlGetVersion(&version_info);
+    if (status != windows.NTSTATUS.SUCCESS) {
         return error.WindowsApiFailed;
     }
 
@@ -253,13 +254,13 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
 fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
     const sub_key = std.unicode.utf8ToUtf16LeStringLiteral("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0");
     const value = std.unicode.utf8ToUtf16LeStringLiteral("ProcessorNameString");
-    var reg_key: std.os.windows.HKEY = undefined;
+    var reg_key: windows.HKEY = undefined;
 
-    const open_res = std.os.windows.advapi32.RegOpenKeyExW(
-        std.os.windows.HKEY_LOCAL_MACHINE,
+    const open_res = windows.advapi32.RegOpenKeyExW(
+        windows.HKEY_LOCAL_MACHINE,
         sub_key,
         0,
-        std.os.windows.KEY_READ,
+        windows.KEY_READ,
         &reg_key,
     );
 
@@ -268,12 +269,12 @@ fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
     }
 
     var cpu: [255]u16 = undefined;
-    var cpu_size: windows.DWORD = std.os.windows.NAME_MAX;
-    const query_res = std.os.windows.advapi32.RegQueryValueExW(reg_key, value, null, null, @as(?*std.os.windows.BYTE, @ptrCast(&cpu)), &cpu_size);
+    var cpu_size: windows.DWORD = windows.NAME_MAX;
+    const query_res = windows.advapi32.RegQueryValueExW(reg_key, value, null, null, @as(?*windows.BYTE, @ptrCast(&cpu)), &cpu_size);
 
-    _ = std.os.windows.advapi32.RegCloseKey(reg_key);
+    _ = windows.advapi32.RegCloseKey(reg_key);
 
-    if (query_res != windows.ERROR_SUCCESS) {
+    if (query_res != cwin.ERROR_SUCCESS) {
         return error.UnableToOpenRegistry;
     }
 
@@ -393,7 +394,7 @@ fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsUptime(allocator: std.mem.Allocator) ![]const u8 {
-    const uptime_milliseconds = windows.GetTickCount64();
+    const uptime_milliseconds = cwin.GetTickCount64();
     const uptime_seconds: u64 = uptime_milliseconds / 1000;
 
     return formatUptime(allocator, uptime_seconds);

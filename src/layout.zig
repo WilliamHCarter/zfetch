@@ -126,7 +126,6 @@ fn parseTheme(content: []const u8) !Theme {
             try theme.components.append(component);
         }
     }
-    std.debug.print("finished parsing theme\n", .{});
     return theme;
 }
 
@@ -163,7 +162,6 @@ pub fn render(theme: Theme) !void {
     var timer = try Timer.init(allocator);
     defer timer.deinit();
     timer.start();
-    std.debug.print("Rendering theme: {s}\n", .{theme.name});
     var results = std.ArrayList(FetchResult).init(allocator);
     defer {
         for (results.items) |item| {
