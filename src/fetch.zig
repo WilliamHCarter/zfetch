@@ -251,42 +251,36 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
-    // var sys_info: c.SYSTEM_INFO = undefined;
-    // c.GetSystemInfo(&sys_info);
+    const sub_key = std.unicode.utf8ToUtf16LeStringLiteral("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0");
+    const value = std.unicode.utf8ToUtf16LeStringLiteral("ProcessorNameString");
+    var reg_key: std.os.windows.HKEY = undefined;
 
-    // var hKey: ?c.HKEY = null;
-    // const key = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\\ProcessorNameString";
-    // var buffer: [256]u8 = undefined;
-    // var buffer_len: c.DWORD = @sizeOf(buffer);
+    const open_res = std.os.windows.advapi32.RegOpenKeyExW(
+        std.os.windows.HKEY_LOCAL_MACHINE,
+        sub_key,
+        0,
+        std.os.windows.KEY_READ,
+        &reg_key,
+    );
 
-    // const reg_result = c.RegOpenKeyExA(
-    //     c.HKEY_LOCAL_MACHINE,
-    //     key,
-    //     0,
-    //     c.KEY_READ,
-    //     &hKey,
-    // );
+    if (open_res != 0) {
+        return error.UnableToOpenRegistry;
+    }
 
-    // if (reg_result == 0) {
-    //     const reg_query_result = c.RegQueryValueExA(
-    //         hKey,
-    //         null,
-    //         null,
-    //         null,
-    //         &buffer,
-    //         &buffer_len,
-    //     );
+    var cpu: [255]u16 = undefined;
+    var cpu_size: windows.DWORD = std.os.windows.NAME_MAX;
+    const query_res = std.os.windows.advapi32.RegQueryValueExW(reg_key, value, null, null, @as(?*std.os.windows.BYTE, @ptrCast(&cpu)), &cpu_size);
 
-    //     if (reg_query_result == 0) {
-    //         _ = c.RegCloseKey(hKey);
-    //         return std.fmt.allocPrint(allocator, "{} - {} cores", .{ buffer[0 .. buffer_len - 1], info.dwNumberOfProcessors });
-    //     }
-    // }
+    _ = std.os.windows.advapi32.RegCloseKey(reg_key);
 
-    // return std.fmt.allocPrint(allocator, "CPU: {} cores", .{info.dwNumberOfProcessors});
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    if (query_res != windows.ERROR_SUCCESS) {
+        return error.UnableToOpenRegistry;
+    }
+
+    const result = std.unicode.utf16LeToUtf8Alloc(allocator, &cpu) catch "";
+    const index = std.mem.indexOf(u16, &cpu, &[_]u16{0}) orelse cpu.len;
+    return std.fmt.allocPrint(allocator, "{s}", .{result[0..index]});
 }
-
 //================= Fetch Memory =================
 pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxMemory, darwinMemory, bsdMemory, windowsMemory);
