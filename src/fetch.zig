@@ -282,6 +282,7 @@ fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
     const index = std.mem.indexOf(u16, &cpu, &[_]u16{0}) orelse cpu.len;
     return std.fmt.allocPrint(allocator, "{s}", .{result[0..index]});
 }
+
 //================= Fetch Memory =================
 pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxMemory, darwinMemory, bsdMemory, windowsMemory);
@@ -544,7 +545,7 @@ pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxDE(allocator),
         .Darwin => darwinDE(),
         .BSD => bsdDE(allocator),
-        .Windows => windowsDE(),
+        .Windows => windowsDE(allocator),
         .Unknown => return error.UnknownDE,
     };
     return result;
@@ -562,8 +563,30 @@ fn bsdDE(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
-fn windowsDE() ![]const u8 {
-    return "TODO";
+fn windowsDE(allocator: std.mem.Allocator) ![]const u8 {
+    const os_version = try windowsOS(allocator);
+    const major_version = try parseMajorVersion(os_version);
+    return switch (major_version) {
+        10 => "Fluent",
+        8 => "Metro",
+        7, 6 => "Aero",
+        5 => "Luna",
+        else => "Classic Windows",
+    };
+}
+
+fn parseMajorVersion(version: []const u8) !u8 {
+    var majorVersion: u8 = 0;
+    var i: usize = 0;
+    while (i < version.len) : (i += 1) {
+        if (version[i] == '.') {
+            break;
+        }
+        if (version[i] >= '0' and version[i] <= '9') {
+            majorVersion = majorVersion * 10 + (version[i] - '0');
+        }
+    }
+    return majorVersion;
 }
 
 //================= Fetch WM =================
