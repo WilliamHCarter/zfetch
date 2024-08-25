@@ -4,10 +4,16 @@
 // Author:     Will Carter
 //==================================================================================================
 const std = @import("std");
+const builtin = @import("builtin");
 const fetch = @import("fetch.zig");
 const buf = @import("utils/buffer.zig");
 const Timer = @import("utils/timer.zig").Timer;
 //=========================== Data Structures ===========================
+const newline = switch (builtin.os.tag) {
+    .windows => "\r\n",
+    else => "\n",
+};
+
 pub const Component = struct {
     kind: ComponentKind,
     properties: std.StringHashMap([]const u8),
@@ -109,7 +115,7 @@ pub fn loadTheme(name: []const u8) !Theme {
 
 fn parseTheme(content: []const u8) !Theme {
     var theme = Theme.init("parsed_theme");
-    var lines = std.mem.split(u8, content, "\n");
+    var lines = std.mem.split(u8, content, newline);
 
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t");
@@ -120,7 +126,6 @@ fn parseTheme(content: []const u8) !Theme {
             try theme.components.append(component);
         }
     }
-
     return theme;
 }
 
@@ -137,7 +142,6 @@ fn parseComponent(component_str: []const u8) !Component {
         const value = kv.next() orelse continue;
         try component.properties.put(key, value);
     }
-
     return component;
 }
 
@@ -158,7 +162,6 @@ pub fn render(theme: Theme) !void {
     var timer = try Timer.init(allocator);
     defer timer.deinit();
     timer.start();
-
     var results = std.ArrayList(FetchResult).init(allocator);
     defer {
         for (results.items) |item| {
@@ -257,7 +260,6 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     var arena = std.heap.ArenaAllocator.init(buffer.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
     switch (component.kind) {
         .Username => try buffer.addComponentRow(Colors.Secondary, fetched_result, " "),
         .OS => try buffer.addComponentRow(Colors.Primary, "OS", fetched_result),
@@ -348,6 +350,9 @@ fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit,
 
 fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
     var memory = fetch.getMemory(allocator) catch "Fetch Error";
+    if (std.mem.eql(u8, memory, "Windows")) { //Temp hack, remove later
+        return memory;
+    }
 
     var it = std.mem.split(u8, memory, " / ");
     const mem_used = it.next() orelse unreachable;

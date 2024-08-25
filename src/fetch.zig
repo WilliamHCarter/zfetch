@@ -14,7 +14,10 @@ const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
-
+const windows = std.os.windows;
+const cwin = @cImport({
+    @cInclude("windows.h");
+});
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -116,11 +119,11 @@ fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
-    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    var version_info: windows.RTL_OSVERSIONINFOW = undefined;
     version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    const status = windows.ntdll.RtlGetVersion(&version_info);
+    if (status != windows.NTSTATUS.SUCCESS) {
         return error.WindowsApiFailed;
     }
 
@@ -216,11 +219,11 @@ fn bsdKernel(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsKernel(allocator: std.mem.Allocator) ![]const u8 {
-    var version_info: std.os.windows.RTL_OSVERSIONINFOW = undefined;
+    var version_info: windows.RTL_OSVERSIONINFOW = undefined;
     version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
 
-    const status = std.os.windows.ntdll.RtlGetVersion(&version_info);
-    if (status != std.os.windows.NTSTATUS.SUCCESS) {
+    const status = windows.ntdll.RtlGetVersion(&version_info);
+    if (status != windows.NTSTATUS.SUCCESS) {
         return error.WindowsApiFailed;
     }
 
@@ -249,40 +252,35 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
-    // var sys_info: c.SYSTEM_INFO = undefined;
-    // c.GetSystemInfo(&sys_info);
+    const sub_key = std.unicode.utf8ToUtf16LeStringLiteral("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0");
+    const value = std.unicode.utf8ToUtf16LeStringLiteral("ProcessorNameString");
+    var reg_key: windows.HKEY = undefined;
 
-    // var hKey: ?c.HKEY = null;
-    // const key = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\\ProcessorNameString";
-    // var buffer: [256]u8 = undefined;
-    // var buffer_len: c.DWORD = @sizeOf(buffer);
+    const open_res = windows.advapi32.RegOpenKeyExW(
+        windows.HKEY_LOCAL_MACHINE,
+        sub_key,
+        0,
+        windows.KEY_READ,
+        &reg_key,
+    );
 
-    // const reg_result = c.RegOpenKeyExA(
-    //     c.HKEY_LOCAL_MACHINE,
-    //     key,
-    //     0,
-    //     c.KEY_READ,
-    //     &hKey,
-    // );
+    if (open_res != 0) {
+        return error.UnableToOpenRegistry;
+    }
 
-    // if (reg_result == 0) {
-    //     const reg_query_result = c.RegQueryValueExA(
-    //         hKey,
-    //         null,
-    //         null,
-    //         null,
-    //         &buffer,
-    //         &buffer_len,
-    //     );
+    var cpu: [255]u16 = undefined;
+    var cpu_size: windows.DWORD = windows.NAME_MAX;
+    const query_res = windows.advapi32.RegQueryValueExW(reg_key, value, null, null, @as(?*windows.BYTE, @ptrCast(&cpu)), &cpu_size);
 
-    //     if (reg_query_result == 0) {
-    //         _ = c.RegCloseKey(hKey);
-    //         return std.fmt.allocPrint(allocator, "{} - {} cores", .{ buffer[0 .. buffer_len - 1], info.dwNumberOfProcessors });
-    //     }
-    // }
+    _ = windows.advapi32.RegCloseKey(reg_key);
 
-    // return std.fmt.allocPrint(allocator, "CPU: {} cores", .{info.dwNumberOfProcessors});
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    if (query_res != cwin.ERROR_SUCCESS) {
+        return error.UnableToOpenRegistry;
+    }
+
+    const result = std.unicode.utf16LeToUtf8Alloc(allocator, &cpu) catch "";
+    const index = std.mem.indexOf(u16, &cpu, &[_]u16{0}) orelse cpu.len;
+    return std.fmt.allocPrint(allocator, "{s}", .{result[0..index]});
 }
 
 //================= Fetch Memory =================
@@ -352,7 +350,6 @@ fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
 fn getBootTime(allocator: std.mem.Allocator) !i64 {
     const output = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
     defer allocator.free(output);
-
     var iter = std.mem.split(u8, output, "=");
     _ = iter.next();
     const boot_time_str = iter.next() orelse return error.BootTimeNotFound;
@@ -398,7 +395,10 @@ fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsUptime(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    const uptime_milliseconds = cwin.GetTickCount64();
+    const uptime_seconds: u64 = uptime_milliseconds / 1000;
+
+    return formatUptime(allocator, uptime_seconds);
 }
 
 //================= Fetch Packages =================
@@ -545,7 +545,7 @@ pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
         .Linux => linuxDE(allocator),
         .Darwin => darwinDE(),
         .BSD => bsdDE(allocator),
-        .Windows => windowsDE(),
+        .Windows => windowsDE(allocator),
         .Unknown => return error.UnknownDE,
     };
     return result;
@@ -563,8 +563,30 @@ fn bsdDE(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
-fn windowsDE() ![]const u8 {
-    return "TODO";
+fn windowsDE(allocator: std.mem.Allocator) ![]const u8 {
+    const os_version = try windowsOS(allocator);
+    const major_version = try parseMajorVersion(os_version);
+    return switch (major_version) {
+        10 => "Fluent",
+        8 => "Metro",
+        7, 6 => "Aero",
+        5 => "Luna",
+        else => "Classic Windows",
+    };
+}
+
+fn parseMajorVersion(version: []const u8) !u8 {
+    var majorVersion: u8 = 0;
+    var i: usize = 0;
+    while (i < version.len) : (i += 1) {
+        if (version[i] == '.') {
+            break;
+        }
+        if (version[i] >= '0' and version[i] <= '9') {
+            majorVersion = majorVersion * 10 + (version[i] - '0');
+        }
+    }
+    return majorVersion;
 }
 
 //================= Fetch WM =================
@@ -587,7 +609,7 @@ fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsWM(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 //================= Fetch Theme =================
@@ -635,7 +657,7 @@ fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 //================= Fetch GPU =================
@@ -656,7 +678,7 @@ fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 //================= Fetch Logo =================
@@ -676,7 +698,7 @@ fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
     //     idx += 1;
     // }
     // return os_name_lower;
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
@@ -689,11 +711,11 @@ fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return std.fmt.allocPrint(allocator, "TODO", .{});
 }
 
 //================= Fetch Colors =================
@@ -701,11 +723,7 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxColors, darwinColors, bsdColors, windowsColors);
 }
 
-fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
-}
-
-fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
+fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
     try result.append('\n');
@@ -724,12 +742,20 @@ fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
     return result.toOwnedSlice();
 }
 
+fn linuxColors(allocator: std.mem.Allocator) ![]const u8 {
+    return ansiColors(allocator);
+}
+
+fn darwinColors(allocator: std.mem.Allocator) ![]const u8 {
+    return ansiColors(allocator);
+}
+
 fn bsdColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return ansiColors(allocator);
 }
 
 fn windowsColors(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{}", .{"TODO"});
+    return ansiColors(allocator);
 }
 
 pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
@@ -747,19 +773,8 @@ pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
-    var username_buffer: [std.os.windows.UNLEN + 1]u16 = undefined;
-    var username_size: std.os.windows.DWORD = std.os.windows.UNLEN + 1;
-    if (std.os.windows.GetUserNameW(&username_buffer, &username_size) == 0) {
-        return std.os.windows.GetLastError();
-    }
-    const username = try std.unicode.utf16leToUtf8Alloc(allocator, username_buffer[0 .. username_size - 1]);
+    const username = fetchEnvVar(allocator, "USER");
+    //defer allocator.free(username);
 
-    var hostname_buffer: [std.os.windows.MAX_COMPUTERNAME_LENGTH + 1]u16 = undefined;
-    var hostname_size: std.os.windows.DWORD = std.os.windows.MAX_COMPUTERNAME_LENGTH + 1;
-    if (std.os.windows.GetComputerNameW(&hostname_buffer, &hostname_size) == 0) {
-        return std.os.windows.GetLastError();
-    }
-    const hostname = try std.unicode.utf16leToUtf8Alloc(allocator, hostname_buffer[0..hostname_size]);
-
-    return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
+    return try std.fmt.allocPrint(allocator, "{s}", .{username});
 }
