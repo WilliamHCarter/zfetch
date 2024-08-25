@@ -1,18 +1,16 @@
 name: Cross-Platform Build
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
   release:
     types: [created]
+  workflow_dispatch:
 
 jobs:
   build:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -25,9 +23,46 @@ jobs:
     
     - name: Build
       run: zig build
+      continue-on-error: true
+      id: build
     
+    - name: Run tests
+      run: zig build test
+      continue-on-error: true
+      id: test
+
     - name: Create artifact
       uses: actions/upload-artifact@v2
+      if: steps.build.outcome == 'success'
       with:
         name: ${{ matrix.os }}-build
-        path: zig-out/bin/
+        path: zig-out/bin/y
+
+    - name: Report Status
+      if: always()
+      env:
+        BUILD_STATUS: ${{ steps.build.outcome }}
+        TEST_STATUS: ${{ steps.test.outcome }}
+      run: |
+        echo "Build status for ${{ matrix.os }}: $BUILD_STATUS"
+        echo "Test status for ${{ matrix.os }}: $TEST_STATUS"
+        if [ "$BUILD_STATUS" != "success" ] || [ "$TEST_STATUS" != "success" ]; then
+          echo "::error::Build or test failed on ${{ matrix.os }}"
+          exit 1
+        fi
+
+  summary:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Summarize Build Results
+      run: |
+        echo "Build Summary:"
+        echo "Ubuntu: ${{ needs.build.result }}"
+        echo "macOS: ${{ needs.build.result }}"
+        echo "Windows: ${{ needs.build.result }}"
+        if [ "${{ needs.build.result }}" != "success" ]; then
+          echo "::error::One or more builds failed. Check individual jobs for details."
+          exit 1
+        fi
