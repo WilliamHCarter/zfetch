@@ -277,7 +277,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
         .GPU => try buffer.addComponentRow(Colors.Primary, "GPU", fetched_result),
         .Memory => try buffer.addComponentRow(Colors.Primary, "Memory", renderMemory(component, allocator)),
         .Logo => try renderLogo(buffer, component, allocator),
-        .TopBar => try renderTopBar(buffer),
+        .TopBar => try renderTopBar(allocator, buffer),
         .Colors => try renderColors(buffer, allocator),
     }
 }
@@ -394,12 +394,20 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     try buffer.addRow();
 }
 
+//❯
 fn renderTopBar(buffer: *buf.Buffer) !void {
-    const top_bar = "-------------------------------------";
+    const username = try fetch.getUsername(buffer.allocator);
+    defer buffer.allocator.free(username);
+
+    const top_bar = try buffer.allocator.alloc(u8, username.len);
+    defer buffer.allocator.free(top_bar);
+
+    const bar_symbol = "-";
+    @memset(top_bar, bar_symbol[0]);
+
     try buffer.write(buffer.getCurrentRow(), 0, top_bar);
     try buffer.addRow();
 }
-
 //=========================== Logo Rendering ===========================
 const LogoPosition = enum {
     Top,
