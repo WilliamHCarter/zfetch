@@ -15,9 +15,8 @@ const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
-const cwin = @cImport({
-    @cInclude("windows.h");
-});
+const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig") else undefined;
+
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -541,22 +540,15 @@ fn windowsResolution(allocator: std.mem.Allocator) ![]const u8 {
 
 //================= Fetch DE =================
 pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try switch (getKernelType()) {
-        .Linux => linuxDE(allocator),
-        .Darwin => darwinDE(),
-        .BSD => bsdDE(allocator),
-        .Windows => windowsDE(allocator),
-        .Unknown => return error.UnknownDE,
-    };
-    return result;
+    return OSSwitch(allocator, linuxDE, darwinDE, bsdDE, windowsDE);
 }
 
 fn linuxDE(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
 }
 
-fn darwinDE() ![]const u8 {
-    return "Aqua";
+fn darwinDE(allocator: std.mem.Allocator) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "Aqua", .{});
 }
 
 fn bsdDE(allocator: std.mem.Allocator) ![]const u8 {

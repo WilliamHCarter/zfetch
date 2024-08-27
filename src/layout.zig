@@ -395,12 +395,12 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
 }
 
 //❯
-fn renderTopBar(buffer: *buf.Buffer) !void {
-    const username = try fetch.getUsername(buffer.allocator);
-    defer buffer.allocator.free(username);
+fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
+    const username = try fetch.getUsername(allocator);
+    defer allocator.free(username);
 
-    const top_bar = try buffer.allocator.alloc(u8, username.len);
-    defer buffer.allocator.free(top_bar);
+    const top_bar = try allocator.alloc(u8, username.len);
+    defer allocator.free(top_bar);
 
     const bar_symbol = "-";
     @memset(top_bar, bar_symbol[0]);
@@ -518,7 +518,7 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
     defer allocator.free(ascii_art_color);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
-    std.debug.print("Logo width: {}\n", .{logo_width});
+    // std.debug.print("Logo width: {}\n", .{logo_width});
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, "\n");
