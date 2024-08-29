@@ -144,40 +144,15 @@ fn parseComponent(component_str: []const u8) !Component {
     }
     return component;
 }
-
-//=========================== Rendering ===========================
-const FetchResult = struct {
-    component: Component,
-    result: []const u8,
-};
-
-pub fn render(theme: Theme) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const err = gpa.deinit();
-        if (err == .leak) std.debug.print("Memory leaks detected: {}\n", .{err});
-    }
-
-    var timer = try Timer.init(allocator);
-    defer timer.deinit();
-    timer.start();
-    var results = std.ArrayList(FetchResult).init(allocator);
-    defer {
-        for (results.items) |item| {
-            allocator.free(item.result);
-        }
-        results.deinit();
-    }
-
-    var buffer = try buf.Buffer.init(allocator, 50, 150);
-    defer buffer.deinit();
-
+//=========================== Fetching ===========================
+fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.ArrayList(FetchResult) {
     var mutex = std.Thread.Mutex{};
     var fetch_queue = std.ArrayList(Component).init(allocator);
     defer fetch_queue.deinit();
 
     try fetch_queue.appendSlice(theme.components.items);
+
+    var results = std.ArrayList(FetchResult).init(allocator);
 
     var threads: [6]std.Thread = undefined;
     for (&threads) |*thread| {
@@ -186,40 +161,21 @@ pub fn render(theme: Theme) !void {
             &mutex,
             &fetch_queue,
             &results,
-            &timer,
+            timer,
         });
     }
 
     for (threads) |thread| {
         thread.join();
     }
-
-    const start_time = try timer.startLap("render");
-
-    std.sort.block(FetchResult, results.items, theme, componentOrder);
-    var logo: ?Component = undefined;
-    for (results.items) |result| {
-        if (result.component.kind == ComponentKind.Logo) {
-            logo = result.component;
-            continue;
-        }
-        try renderComponent(&buffer, result.component, result.result);
-    }
-
-    if (logo != null) {
-        try renderComponent(&buffer, logo.?, "");
-    }
-    const stdout = std.io.getStdOut().writer();
-    try buffer.render(stdout);
-    try timer.endLap("render", start_time);
-    try timer.printResults(stdout);
+    return results;
 }
 
 fn fetchWorker(
     allocator: std.mem.Allocator,
     mutex: *std.Thread.Mutex,
     fetch_queue: *std.ArrayList(Component),
-    results: *std.ArrayList(FetchResult),
+    fetch_results: *std.ArrayList(FetchResult),
     timer: *Timer,
 ) !void {
     while (true) {
@@ -238,11 +194,53 @@ fn fetchWorker(
         try timer.endLap(lap_key, start_time);
 
         mutex.lock();
-        try results.append(.{ .component = component, .result = result });
+        try fetch_results.append(.{ .component = component, .result = result });
         mutex.unlock();
 
         allocator.free(lap_key);
     }
+}
+
+//=========================== Rendering ===========================
+const FetchResult = struct {
+    component: Component,
+    result: []const u8,
+};
+
+pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
+    var timer = try Timer.init(allocator);
+    defer timer.deinit();
+    timer.start();
+
+    var buffer = try buf.Buffer.init(allocator, 50, 150);
+    defer buffer.deinit();
+
+    const fetch_results = try fetchHandler(theme, allocator, &timer);
+    defer {
+        for (fetch_results.items) |item| {
+            allocator.free(item.result);
+        }
+        fetch_results.deinit();
+    }
+
+    const start_time = try timer.startLap("render");
+    std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
+    var logo: ?Component = undefined;
+    for (fetch_results.items) |result| {
+        if (result.component.kind == ComponentKind.Logo) {
+            logo = result.component;
+            continue;
+        }
+        try renderComponent(&buffer, result.component, result.result);
+    }
+
+    if (logo != null) {
+        try renderComponent(&buffer, logo.?, "");
+    }
+    const stdout = std.io.getStdOut().writer();
+    try buffer.render(stdout);
+    try timer.endLap("render", start_time);
+    try timer.printResults(stdout);
 }
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
