@@ -3,12 +3,14 @@
 // Contents:   System for rendering fetched info based on theme file preferences.
 // Author:     Will Carter
 //==================================================================================================
+
 const std = @import("std");
 const builtin = @import("builtin");
 const fetch = @import("fetch.zig");
 const buf = @import("utils/buffer.zig");
 const Timer = @import("utils/timer.zig").Timer;
-//=========================== Data Structures ===========================
+
+//============================== Data Structures ===============================
 const newline = switch (builtin.os.tag) {
     .windows => "\r\n",
     else => "\n",
@@ -101,7 +103,7 @@ const ColorMap = struct {
         };
     }
 };
-//=========================== Parsing ===========================
+//================================== Parsing ===================================
 
 pub fn loadTheme(name: []const u8) !Theme {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
@@ -144,7 +146,7 @@ fn parseComponent(component_str: []const u8) !Component {
     }
     return component;
 }
-//=========================== Fetching ===========================
+//================================== Fetching ==================================
 fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.ArrayList(FetchResult) {
     var mutex = std.Thread.Mutex{};
     var fetch_queue = std.ArrayList(Component).init(allocator);
@@ -201,7 +203,7 @@ fn fetchWorker(
     }
 }
 
-//=========================== Rendering ===========================
+//================================ Rendering ===================================
 const FetchResult = struct {
     component: Component,
     result: []const u8,
@@ -212,9 +214,6 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     defer timer.deinit();
     timer.start();
 
-    var buffer = try buf.Buffer.init(allocator, 50, 150);
-    defer buffer.deinit();
-
     const fetch_results = try fetchHandler(theme, allocator, &timer);
     defer {
         for (fetch_results.items) |item| {
@@ -224,19 +223,27 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     }
 
     const start_time = try timer.startLap("render");
+    var buffer = try buf.Buffer.init(allocator, 150);
+    defer buffer.deinit();
     std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
     var logo: ?Component = undefined;
     for (fetch_results.items) |result| {
         if (result.component.kind == ComponentKind.Logo) {
             logo = result.component;
-            continue;
+            break;
         }
-        try renderComponent(&buffer, result.component, result.result);
     }
 
     if (logo != null) {
         try renderComponent(&buffer, logo.?, "");
     }
+    for (fetch_results.items) |result| {
+        if (result.component.kind == ComponentKind.Logo) {
+            continue;
+        }
+        try renderComponent(&buffer, result.component, result.result);
+    }
+
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
@@ -306,7 +313,8 @@ fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8
     return allocator.dupe(u8, fetched_component) catch "Fetch Error";
 }
 
-//=========================== Memory Rendering ===========================
+//============================= Memory Rendering ===============================
+
 const MemoryUnit = enum {
     B,
     KB,
@@ -384,12 +392,9 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const first_line = color_lines.next() orelse return error.InvalidColorFile;
     const second_line = color_lines.next() orelse return error.InvalidColorFile;
     const third_line = color_lines.next() orelse return error.InvalidColorFile;
-    try buffer.write(buffer.getCurrentRow(), 0, first_line);
-    try buffer.addRow();
-    try buffer.write(buffer.getCurrentRow(), 0, second_line);
-    try buffer.addRow();
-    try buffer.write(buffer.getCurrentRow(), 0, third_line);
-    try buffer.addRow();
+    try buffer.append(first_line);
+    try buffer.append(second_line);
+    try buffer.append(third_line);
 }
 
 //❯
@@ -403,10 +408,9 @@ fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
     const bar_symbol = "-";
     @memset(top_bar, bar_symbol[0]);
 
-    try buffer.write(buffer.getCurrentRow(), 0, top_bar);
-    try buffer.addRow();
+    try buffer.append(top_bar);
 }
-//=========================== Logo Rendering ===========================
+//============================== Logo Rendering ================================
 const LogoPosition = enum {
     Top,
     Bottom,
@@ -516,40 +520,21 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
     defer allocator.free(ascii_art_color);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
-    // std.debug.print("Logo width: {}\n", .{logo_width});
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
-    var ascii_lines = std.mem.split(u8, ascii_art_color, "\n");
-    const ascii_height = std.mem.count(u8, ascii_art_color, "\n") + 1;
-
+    var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
+    buffer.logo_width = logo_width + 3;
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-        .Top => {
-            try buffer.shiftRowsDown(0, ascii_height);
-            var row: usize = 0;
-            while (ascii_lines.next()) |line| {
-                try buffer.write(row, 0, line);
-                row += 1;
-            }
-        },
-        .Bottom => {
-            const start_row = buffer.getCurrentRow();
-            var row = start_row;
-            while (ascii_lines.next()) |line| {
-                try buffer.write(row, 0, line);
-                row += 1;
-                try buffer.addRow();
-            }
-        },
+        .Top => {},
+        .Bottom => {},
         .Left => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
                 var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
-                if (row >= buffer.getCurrentRow()) {
-                    try buffer.addRow();
-                }
                 @memset(curr_line, ' ');
                 @memcpy(curr_line[0..line_itr.len], line_itr);
-                buffer.insertLeft(row, curr_line);
+                buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], curr_line.len);
+                buffer.insert(curr_line) catch {};
                 row += 1;
             }
             while (row < buffer.getCurrentRow()) {
@@ -557,30 +542,13 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
                 for (blank_width) |*c| {
                     c.* = ' ';
                 }
-                buffer.insertLeft(row, blank_width[0..]);
+                buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], logo_width);
+                buffer.insert(blank_width[0..]) catch {};
                 row += 1;
             }
+            buffer.current_row = 0;
         },
-        .Right => {
-            var row: usize = 0;
-            const start_column = buffer.width - logo_width;
-            while (ascii_lines.next()) |line| {
-                if (row >= buffer.getCurrentRow()) {
-                    try buffer.addRow();
-                }
-                try buffer.write(row, start_column, line);
-                row += 1;
-            }
-        },
-        .Inline => {
-            std.debug.print("Inline\n", .{});
-            const start_row = buffer.getCurrentRow();
-            var row = start_row;
-            while (ascii_lines.next()) |line| {
-                try buffer.write(row, 0, line);
-                try buffer.addRow();
-                row += 1;
-            }
-        },
+        .Right => {},
+        .Inline => {},
     }
 }
