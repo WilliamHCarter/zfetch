@@ -234,11 +234,23 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         }
     }
 
-    if (logo != null) {
-        try renderComponent(&buffer, logo.?, "");
+    var isInline = false;
+    const position = logo.?.properties.get("position") orelse "inline";
+    switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
+        .Top => {
+            try renderComponent(&buffer, logo.?, "");
+        },
+        .Bottom => {},
+        .Left => {
+            try renderComponent(&buffer, logo.?, "");
+        },
+        .Right => {},
+        .Inline => {
+            isInline = true;
+        },
     }
     for (fetch_results.items) |result| {
-        if (result.component.kind == ComponentKind.Logo) {
+        if ((result.component.kind == ComponentKind.Logo) and !isInline) {
             continue;
         }
         try renderComponent(&buffer, result.component, result.result);
@@ -523,11 +535,29 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
-    buffer.logo_width = logo_width + 3;
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-        .Top => {},
-        .Bottom => {},
+        .Top => {
+            var row: usize = 0;
+            while (ascii_lines.next()) |line_itr| {
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                @memset(curr_line, ' ');
+                @memcpy(curr_line[0..line_itr.len], line_itr);
+                buffer.insert(curr_line) catch {};
+                row += 1;
+            }
+        },
+        .Bottom => {
+            var row: usize = 0;
+            while (ascii_lines.next()) |line_itr| {
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                @memset(curr_line, ' ');
+                @memcpy(curr_line[0..line_itr.len], line_itr);
+                buffer.insert(curr_line) catch {};
+                row += 1;
+            }
+        },
         .Left => {
+            buffer.logo_width = logo_width + 3;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
                 var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
@@ -549,6 +579,15 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
             buffer.current_row = 0;
         },
         .Right => {},
-        .Inline => {},
+        .Inline => {
+            var row: usize = 0;
+            while (ascii_lines.next()) |line_itr| {
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                @memset(curr_line, ' ');
+                @memcpy(curr_line[0..line_itr.len], line_itr);
+                buffer.insert(curr_line) catch {};
+                row += 1;
+            }
+        },
     }
 }
