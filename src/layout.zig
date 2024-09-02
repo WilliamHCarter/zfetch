@@ -234,28 +234,29 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         }
     }
 
-    var isInline = false;
+    var is_delayed = false;
+    var is_inline = false;
     const position = logo.?.properties.get("position") orelse "inline";
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-        .Top => {
+        .Top, .Left => {
             try renderComponent(&buffer, logo.?, "");
         },
-        .Bottom => {},
-        .Left => {
-            try renderComponent(&buffer, logo.?, "");
+        .Bottom, .Right => {
+            is_delayed = true;
         },
-        .Right => {},
         .Inline => {
-            isInline = true;
+            is_inline = true;
         },
     }
     for (fetch_results.items) |result| {
-        if ((result.component.kind == ComponentKind.Logo) and !isInline) {
+        if ((result.component.kind == ComponentKind.Logo) and !is_inline) {
             continue;
         }
         try renderComponent(&buffer, result.component, result.result);
     }
-
+    if (is_delayed) {
+        try renderComponent(&buffer, logo.?, "result");
+    }
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
@@ -293,7 +294,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
         .CPU => try buffer.addComponentRow(Colors.Primary, "CPU", fetched_result),
         .GPU => try buffer.addComponentRow(Colors.Primary, "GPU", fetched_result),
         .Memory => try buffer.addComponentRow(Colors.Primary, "Memory", renderMemory(component, allocator)),
-        .Logo => try renderLogo(buffer, component, allocator),
+        .Logo => try renderLogo(component.properties.get("position") orelse "inline", buffer, allocator),
         .TopBar => try renderTopBar(allocator, buffer),
         .Colors => try renderColors(buffer, allocator),
     }
@@ -411,9 +412,8 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
 
 //❯
 fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
-    const username = try fetch.getUsername(allocator);
+    const username = std.mem.trimRight(u8, try fetch.getUsername(allocator), " ");
     defer allocator.free(username);
-
     const top_bar = try allocator.alloc(u8, username.len);
     defer allocator.free(top_bar);
 
@@ -524,8 +524,7 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: Colo
     return result.toOwnedSlice();
 }
 
-fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allocator) !void {
-    const position = component.properties.get("position") orelse "inline";
+fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const ascii_art = try fetch.getLogo(allocator);
     const color_map = ColorMap.init();
     const ascii_art_color = try colorize(allocator, ascii_art, color_map);
@@ -578,7 +577,29 @@ fn renderLogo(buffer: *buf.Buffer, component: Component, allocator: std.mem.Allo
             }
             buffer.current_row = 0;
         },
-        .Right => {},
+        .Right => {
+            // std.debug.print("seg offsets: {d}\n", .{buffer.segment_offsets.items});
+            var seg_max: usize = 0;
+            for (buffer.segment_offsets.items) |item| {
+                seg_max = @max(seg_max, item);
+            }
+            // std.debug.print("seg max: {d}\n", .{seg_max});
+            buffer.current_row = 0;
+            var row: usize = 0;
+            while (ascii_lines.next()) |line_itr| {
+                try buffer.write(row, seg_max, line_itr);
+                row += 1;
+            }
+            while (row < buffer.getCurrentRow()) {
+                var blank_width = try allocator.alloc(u8, logo_width + 3);
+                for (blank_width) |*c| {
+                    c.* = ' ';
+                }
+                buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], logo_width);
+                buffer.insert(blank_width[0..]) catch {};
+                row += 1;
+            }
+        },
         .Inline => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {

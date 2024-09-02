@@ -58,7 +58,7 @@ pub const Buffer = struct {
         self.row_count += 1;
     }
 
-    fn write(self: *Buffer, row: usize, col: usize, text: []const u8) !void {
+    pub fn write(self: *Buffer, row: usize, col: usize, text: []const u8) !void {
         if (row >= self.row_count) return BufferError.RowOutOfBounds;
         if (col >= self.width) return BufferError.ColumnOutOfBounds;
         const line = self.lines.items[row];
@@ -80,8 +80,10 @@ pub const Buffer = struct {
         const formatted_label = try std.fmt.allocPrint(self.allocator, "{s}{s}:\x1b[0m ", .{ color, label });
         defer self.allocator.free(formatted_label);
 
+        const trimmed_data = std.mem.trimRight(u8, data, " ");
         try self.write(self.current_row, self.segment_offsets.items[self.current_row], formatted_label);
-        try self.write(self.current_row, self.segment_offsets.items[self.current_row] + formatted_label.len, data);
+        try self.write(self.current_row, self.segment_offsets.items[self.current_row] + formatted_label.len, trimmed_data);
+        self.segment_offsets.items[self.current_row] += formatted_label.len + data.len;
         try self.addRow();
     }
 
