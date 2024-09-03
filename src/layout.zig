@@ -75,6 +75,7 @@ const Theme = struct {
 const Colors = struct {
     const Primary = "\x1b[1m\x1b[93m";
     const Secondary = "\x1b[1m\x1b[92m";
+    const Tertiary = "\x1b[1m\x1b[91m";
 };
 
 const ColorMap = struct {
@@ -421,6 +422,7 @@ fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
     @memset(top_bar, bar_symbol[0]);
 
     try buffer.append(top_bar);
+    // try buffer.addComponentRow(Colors.Tertiary, top_bar, " ");
 }
 //============================== Logo Rendering ================================
 const LogoPosition = enum {
@@ -535,17 +537,7 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-        .Top => {
-            var row: usize = 0;
-            while (ascii_lines.next()) |line_itr| {
-                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
-                @memset(curr_line, ' ');
-                @memcpy(curr_line[0..line_itr.len], line_itr);
-                buffer.insert(curr_line) catch {};
-                row += 1;
-            }
-        },
-        .Bottom => {
+        .Top, .Bottom, .Inline => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
                 var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
@@ -578,35 +570,17 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
             buffer.current_row = 0;
         },
         .Right => {
-            // std.debug.print("seg offsets: {d}\n", .{buffer.segment_offsets.items});
             var seg_max: usize = 0;
             for (buffer.segment_offsets.items) |item| {
                 seg_max = @max(seg_max, item);
             }
-            // std.debug.print("seg max: {d}\n", .{seg_max});
             buffer.current_row = 0;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
                 try buffer.write(row, seg_max, line_itr);
-                row += 1;
-            }
-            while (row < buffer.getCurrentRow()) {
-                var blank_width = try allocator.alloc(u8, logo_width + 3);
-                for (blank_width) |*c| {
-                    c.* = ' ';
+                if (row >= buffer.getCurrentRow()) {
+                    try buffer.addRow();
                 }
-                buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], logo_width);
-                buffer.insert(blank_width[0..]) catch {};
-                row += 1;
-            }
-        },
-        .Inline => {
-            var row: usize = 0;
-            while (ascii_lines.next()) |line_itr| {
-                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
-                @memset(curr_line, ' ');
-                @memcpy(curr_line[0..line_itr.len], line_itr);
-                buffer.insert(curr_line) catch {};
                 row += 1;
             }
         },
