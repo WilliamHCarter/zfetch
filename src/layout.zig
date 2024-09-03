@@ -215,7 +215,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     defer timer.deinit();
     timer.start();
 
-    const fetch_results = try fetchHandler(theme, allocator, &timer);
+    var fetch_results = try fetchHandler(theme, allocator, &timer);
     defer {
         for (fetch_results.items) |item| {
             allocator.free(item.result);
@@ -227,37 +227,30 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     var buffer = try buf.Buffer.init(allocator, 150);
     defer buffer.deinit();
     std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
-    var logo: ?Component = undefined;
-    for (fetch_results.items) |result| {
+
+    var logo_index: ?usize = null;
+    for (fetch_results.items, 0..) |result, idx| {
         if (result.component.kind == ComponentKind.Logo) {
-            logo = result.component;
+            logo_index = idx;
             break;
         }
     }
 
-    var is_delayed = false;
-    var is_inline = false;
-    const position = logo.?.properties.get("position") orelse "inline";
-    switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-        .Top, .Left => {
-            try renderComponent(&buffer, logo.?, "");
-        },
-        .Bottom, .Right => {
-            is_delayed = true;
-        },
-        .Inline => {
-            is_inline = true;
-        },
-    }
-    for (fetch_results.items) |result| {
-        if ((result.component.kind == ComponentKind.Logo) and !is_inline) {
-            continue;
+    if (logo_index) |idx| {
+        const logo = fetch_results.orderedRemove(idx);
+        const position = logo.component.properties.get("position") orelse "inline";
+
+        switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
+            .Top, .Left => fetch_results.insert(0, logo) catch {},
+            .Bottom, .Right => fetch_results.append(logo) catch {},
+            .Inline => fetch_results.insert(idx, logo) catch {},
         }
+    }
+
+    for (fetch_results.items) |result| {
         try renderComponent(&buffer, result.component, result.result);
     }
-    if (is_delayed) {
-        try renderComponent(&buffer, logo.?, "result");
-    }
+
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
