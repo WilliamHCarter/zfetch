@@ -254,7 +254,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
-    try timer.printResults(stdout);
+    // try timer.printResults(stdout);
 }
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
@@ -529,11 +529,12 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
+    const padding = 3;
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top, .Bottom, .Inline => {
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + padding);
                 @memset(curr_line, ' ');
                 @memcpy(curr_line[0..line_itr.len], line_itr);
                 buffer.insert(curr_line) catch {};
@@ -541,10 +542,10 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
             }
         },
         .Left => {
-            buffer.logo_width = logo_width + 3;
+            buffer.logo_width = logo_width + padding;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + 3);
+                var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + padding);
                 @memset(curr_line, ' ');
                 @memcpy(curr_line[0..line_itr.len], line_itr);
                 buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], curr_line.len);
@@ -552,7 +553,7 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
                 row += 1;
             }
             while (row < buffer.getCurrentRow()) {
-                var blank_width = try allocator.alloc(u8, logo_width + 3);
+                var blank_width = try allocator.alloc(u8, logo_width + padding);
                 for (blank_width) |*c| {
                     c.* = ' ';
                 }
@@ -563,14 +564,17 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
             buffer.current_row = 0;
         },
         .Right => {
-            var seg_max: usize = 0;
-            for (buffer.segment_offsets.items) |item| {
-                seg_max = @max(seg_max, item);
+            var row_max: usize = 0;
+            for (buffer.lines.items) |item| {
+                const visual_line = std.mem.trimRight(u8, try allocator.dupe(u8, item), " ");
+                row_max = @max(row_max, try buffer.stripTerminalCodes(visual_line));
             }
             buffer.current_row = 0;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                try buffer.write(row, seg_max, line_itr);
+                const visual_line = std.mem.trimRight(u8, try allocator.dupe(u8, buffer.lines.items[row]), " ");
+                const stripped_line = try buffer.stripTerminalCodes(visual_line);
+                try buffer.write(row, row_max + (visual_line.len - stripped_line) + padding, line_itr);
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();
                 }

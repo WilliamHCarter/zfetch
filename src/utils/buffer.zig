@@ -73,6 +73,8 @@ pub const Buffer = struct {
 
     pub fn append(self: *Buffer, text: []const u8) !void {
         try self.write(self.current_row, self.segment_offsets.items[self.current_row], text);
+        self.segment_offsets.items[self.current_row] += text.len;
+
         try self.addRow();
     }
 
@@ -83,7 +85,7 @@ pub const Buffer = struct {
         const trimmed_data = std.mem.trimRight(u8, data, " ");
         try self.write(self.current_row, self.segment_offsets.items[self.current_row], formatted_label);
         try self.write(self.current_row, self.segment_offsets.items[self.current_row] + formatted_label.len, trimmed_data);
-        self.segment_offsets.items[self.current_row] += formatted_label.len + data.len;
+        self.segment_offsets.items[self.current_row] += label.len + data.len;
         try self.addRow();
     }
 
@@ -92,6 +94,24 @@ pub const Buffer = struct {
             const trimmed_line = std.mem.trimRight(u8, line, " ");
             try writer.print("{s}\n", .{trimmed_line});
         }
+    }
+
+    pub fn stripTerminalCodes(self: *Buffer, input: []const u8) !usize {
+        var output = try std.ArrayList(u8).initCapacity(self.allocator, input.len);
+        defer output.deinit();
+
+        var i: usize = 0;
+        while (i < input.len) {
+            if (input[i] == '\x1b') {
+                while (i < input.len and input[i] != 'm') : (i += 1) {}
+                i += 1;
+            } else {
+                try output.append(input[i]);
+                i += 1;
+            }
+        }
+
+        return output.items.len;
     }
 };
 
