@@ -7,7 +7,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const info = @import("info.zig");
-const packages = @import("fetch/packages_macos.zig");
+const packages_macos = @import("fetch/packages_macos.zig");
+const packages_windows = @import("fetch/packages_windows.zig");
 const host = @import("fetch/host_macos.zig");
 const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
@@ -49,7 +50,7 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
     try child.spawn();
 
     const stdout = child.stdout orelse return fallback;
-    const result = try stdout.reader().readAllAlloc(allocator, 1024);
+    const result = try stdout.reader().readAllAlloc(allocator, 40960);
     defer allocator.free(result);
     const trimmed_result = std.mem.trim(u8, result, "\n");
     return allocator.dupe(u8, trimmed_result);
@@ -412,7 +413,7 @@ fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinPackages(allocator: std.mem.Allocator) ![]const u8 {
-    return try packages.getMacosPackages(allocator);
+    return try packages_macos.getMacosPackages(allocator);
 }
 
 fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
@@ -420,7 +421,7 @@ fn bsdPackages(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsPackages(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    return try packages_windows.getWindowsPackages(allocator);
 }
 
 //================= Fetch Shell =================
