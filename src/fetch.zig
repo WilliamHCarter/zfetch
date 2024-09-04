@@ -15,7 +15,9 @@ const wm = @import("fetch/wm_macos.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
-const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig") else undefined;
+const cwin = if (builtin.os.tag == .windows) @cImport({
+    @cInclude("windows.h");
+}) else undefined;
 
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
@@ -273,7 +275,7 @@ fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
 
     _ = windows.advapi32.RegCloseKey(reg_key);
 
-    if (query_res != cwin.ERROR_SUCCESS) {
+    if (query_res != 0) {
         return error.UnableToOpenRegistry;
     }
 
@@ -707,7 +709,12 @@ fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
+    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/windows.txt", .{cwd});
+    defer allocator.free(path);
+    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    return content;
 }
 
 //================= Fetch Colors =================
@@ -765,8 +772,8 @@ pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
-    const username = fetchEnvVar(allocator, "USER");
-    //defer allocator.free(username);
+    const username = fetchEnvVar(allocator, "USERNAME");
+    const hostname = fetchEnvVar(allocator, "COMPUTERNAME");
 
-    return try std.fmt.allocPrint(allocator, "{s}", .{username});
+    return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }

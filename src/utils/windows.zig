@@ -1,3 +1,3 @@
-const windows = @cImport({
+const cwin = @cImport({
     @cInclude("windows.h");
 });
