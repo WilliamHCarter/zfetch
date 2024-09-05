@@ -306,18 +306,17 @@ fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsMemory(allocator: std.mem.Allocator) ![]const u8 {
-    // var memory_status: c.MEMORYSTATUSEX = undefined;
-    // memory_status.dwLength = @sizeOf(c.MEMORYSTATUSEX);
-    // if (c.GlobalMemoryStatusEx(&memory_status) == 0) {
-    //     return error.MemoryStatusFailed;
-    // }
+    var memory_status: cwin.MEMORYSTATUSEX = undefined;
+    memory_status.dwLength = @sizeOf(cwin.MEMORYSTATUSEX);
+    if (cwin.GlobalMemoryStatusEx(&memory_status) == 0) {
+        return error.MemoryStatusFailed;
+    }
 
-    // const totalPhysMB = memory_status.ullTotalPhys / (1024 * 1024);
-    // const availPhysMB = memory_status.ullAvailPhys / (1024 * 1024);
-    // const usedPhysMB = totalPhysMB - availPhysMB;
+    const totalPhys = memory_status.ullTotalPhys;
+    const availPhys = memory_status.ullAvailPhys;
+    const usedPhys = totalPhys - availPhys;
 
-    // return try std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhysMB, totalPhysMB });
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    return try std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhys, totalPhys });
 }
 
 //================= Fetch Uptime =================
