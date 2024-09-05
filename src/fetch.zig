@@ -13,7 +13,8 @@ const host = @import("fetch/host_macos.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
 const resolution_macos = @import("fetch/resolution_macos.zig");
 const resolution_windows = @import("fetch/resolution_windows.zig");
-const gpu = @import("fetch/gpu_macos.zig");
+const gpu_macos = @import("fetch/gpu_macos.zig");
+const gpu_windows = @import("fetch/gpu_windows.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
 const wm_windows = @import("fetch/wm_windows.zig");
 const theme_windows = @import("fetch/theme_windows.zig");
@@ -635,7 +636,7 @@ fn linuxGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinGPU(allocator: std.mem.Allocator) ![]const u8 {
-    return try gpu.getMacosGPU(allocator);
+    return try gpu_macos.getMacosGPU(allocator);
 }
 
 fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -643,7 +644,7 @@ fn bsdGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    return try gpu_windows.getWindowsGPU(allocator);
 }
 
 //================= Fetch Logo =================
