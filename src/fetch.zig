@@ -12,8 +12,11 @@ const packages_windows = @import("fetch/packages_windows.zig");
 const packages_linux = @import("fetch/packages_linux.zig");
 const host = @import("fetch/host_macos.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
+const terminal_linux = @import("fetch/terminal_linux.zig");
 const resolution_macos = @import("fetch/resolution_macos.zig");
 const resolution_windows = @import("fetch/resolution_windows.zig");
+const resolution_linux = @import("fetch/resolution_linux.zig");
+const de_linux = @import("fetch/de_linux.zig");
 const gpu_macos = @import("fetch/gpu_macos.zig");
 const gpu_windows = @import("fetch/gpu_windows.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
@@ -99,19 +102,19 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
-    // const os_release = "/etc/os-release";
-    // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
-    // defer file.close();
+    const os_release = "/etc/os-release";
+    const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
+    defer file.close();
 
-    // var buf: [1024]u8 = undefined;
-    // const contents = try file.readAll(&buf);
+    var buf: [1024]u8 = undefined;
+    const contents = try file.readAll(&buf);
 
-    // var iter = std.mem.split(contents, "\n");
-    // while (iter.next()) |line| {
-    //     if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
-    //         return std.mem.trim(u8, line[12..], "\"");
-    //     }
-    // }
+    var iter = std.mem.split(contents, "\n");
+    while (iter.next()) |line| {
+        if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
+            return std.mem.trim(u8, line[12..], "\"");
+        }
+    }
 
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
 }
@@ -486,7 +489,8 @@ pub fn getTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "TERM");
+    const term = terminal_linux.fetchTerminal(allocator) catch return "Fetch Error";
+    return term.pretty_name;
 }
 
 fn darwinTerminal(allocator: std.mem.Allocator) ![]const u8 {
@@ -507,7 +511,7 @@ pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "xdpyinfo", "|", "grep", "dimensions" }, "Unknown");
+    return resolution_linux.getLinuxResolution(allocator);
 }
 
 fn darwinResolution(allocator: std.mem.Allocator) ![]const u8 {
@@ -528,7 +532,7 @@ pub fn getDE(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxDE(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+    return try de_linux.getLinuxDE(allocator);
 }
 
 fn darwinDE(allocator: std.mem.Allocator) ![]const u8 {
