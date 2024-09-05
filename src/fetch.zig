@@ -10,6 +10,7 @@ const info = @import("info.zig");
 const packages_macos = @import("fetch/packages_macos.zig");
 const packages_windows = @import("fetch/packages_windows.zig");
 const host = @import("fetch/host_macos.zig");
+const terminal_windows = @import("fetch/terminal_windows.zig");
 const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm = @import("fetch/wm_macos.zig");
@@ -50,7 +51,7 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
     try child.spawn();
 
     const stdout = child.stdout orelse return fallback;
-    const result = try stdout.reader().readAllAlloc(allocator, 40960);
+    const result = try stdout.reader().readAllAlloc(allocator, 8192);
     defer allocator.free(result);
     const trimmed_result = std.mem.trim(u8, result, "\n");
     return allocator.dupe(u8, trimmed_result);
@@ -508,9 +509,9 @@ fn bsdTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "TERM");
+    const term = terminal_windows.fetchTerminal(allocator) catch return "Fetch Error";
+    return term.pretty_name;
 }
-
 //================= Fetch Resolution =================
 pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxResolution, darwinResolution, bsdResolution, windowsResolution);
@@ -726,7 +727,10 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
 fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
-    try result.append('\n');
+    try result.appendSlice(switch (builtin.os.tag) {
+        .windows => "\r\n",
+        else => "\n",
+    });
 
     for (0..8) |i| {
         try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[4{d}m   ", .{i}));
