@@ -180,13 +180,12 @@ fn bsdDevice(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-m" }, "Unknown");
 }
 
-fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
-    // var system_info: c.SYSTEM_INFO = undefined;
-    // c.GetSystemInfo(&system_info);
+pub fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
+    const res = try execCommand(allocator, &[_][]const u8{ "wmic", "computersystem", "get", "model" }, "Unknown");
+    var iter = std.mem.split(u8, res, "\n");
+    _ = iter.next();
 
-    // const name = getNameFromProcessorArchitecture(system_info.wProcessorArchitecture) orelse "Unknown";
-    const name = "windows";
-    return try std.fmt.allocPrint(allocator, "Windows Device with Processor Architecture: {s}", .{name});
+    return iter.next() orelse "Unknown";
 }
 
 fn getNameFromProcessorArchitecture(arch: []const u8) ?[]const u8 {
