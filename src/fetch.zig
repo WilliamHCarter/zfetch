@@ -9,6 +9,7 @@ const builtin = @import("builtin");
 const info = @import("info.zig");
 const packages_macos = @import("fetch/packages_macos.zig");
 const packages_windows = @import("fetch/packages_windows.zig");
+const packages_linux = @import("fetch/packages_linux.zig");
 const host = @import("fetch/host_macos.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
 const resolution_macos = @import("fetch/resolution_macos.zig");
@@ -249,7 +250,35 @@ pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "free", "-h" }, "Unknown");
+    const file = try std.fs.openFileAbsolute("/proc/meminfo", .{});
+    defer file.close();
+
+    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(content);
+
+    var memTotal: u64 = 0;
+    var memAvailable: u64 = 0;
+
+    var lines = std.mem.split(u8, content, "\n");
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, "MemTotal:") or std.mem.startsWith(u8, line, "MemAvailable:")) {
+            var it = std.mem.tokenize(u8, line, " \t");
+            const label = it.next().?;
+            const value = it.next() orelse return error.InvalidFormat;
+            const parsed_value = try std.fmt.parseInt(u64, value, 10);
+
+            if (std.mem.eql(u8, label, "MemTotal:")) {
+                memTotal = parsed_value;
+            } else {
+                memAvailable = parsed_value;
+            }
+        }
+    }
+
+    const totalPhys = memTotal * 1024;
+    const usedPhys = (memTotal - memAvailable) * 1024;
+
+    return try std.fmt.allocPrint(allocator, "{d} / {d}", .{ usedPhys, totalPhys });
 }
 
 fn darwinMemory(allocator: std.mem.Allocator) ![]const u8 {
@@ -366,7 +395,7 @@ pub fn getPackages(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxPackages(allocator: std.mem.Allocator) ![]const u8 {
-    return try execCommand(allocator, &[_][]const u8{ "dpkg", "-l" }, "Unknown");
+    return try packages_linux.getLinuxPackages(allocator);
 }
 
 fn darwinPackages(allocator: std.mem.Allocator) ![]const u8 {
@@ -384,10 +413,6 @@ fn windowsPackages(allocator: std.mem.Allocator) ![]const u8 {
 //================= Fetch Shell =================
 pub fn getShell(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxShell, darwinShell, bsdShell, windowsShell);
-}
-
-fn linuxShell(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "SHELL");
 }
 
 const ShellType = struct {
@@ -411,7 +436,7 @@ fn shellTrim(shell: ShellType, version: []const u8) ![]const u8 {
     return version;
 }
 
-pub fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
+pub fn posixShell(allocator: std.mem.Allocator) ![]const u8 {
     const shells = [_]ShellType{
         .{ .name = "bash", .command = "echo $BASH_VERSION", .trim = "dash" },
         .{ .name = "zsh", .command = "echo $ZSH_VERSION", .trim = "none" },
@@ -437,6 +462,14 @@ pub fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
     defer allocator.free(version);
 
     return try std.fmt.allocPrint(allocator, "{s} {s}", .{ shell_name, version });
+}
+
+fn linuxShell(allocator: std.mem.Allocator) ![]const u8 {
+    return try posixShell(allocator);
+}
+
+fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
+    return try posixShell(allocator);
 }
 
 fn bsdShell(allocator: std.mem.Allocator) ![]const u8 {
