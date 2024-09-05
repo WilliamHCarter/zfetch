@@ -254,7 +254,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
-    // try timer.printResults(stdout);
+    try timer.printResults(stdout);
 }
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {

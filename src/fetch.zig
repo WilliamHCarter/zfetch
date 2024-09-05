@@ -11,7 +11,8 @@ const packages_macos = @import("fetch/packages_macos.zig");
 const packages_windows = @import("fetch/packages_windows.zig");
 const host = @import("fetch/host_macos.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
-const resolution = @import("fetch/resolution_macos.zig");
+const resolution_macos = @import("fetch/resolution_macos.zig");
+const resolution_windows = @import("fetch/resolution_windows.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
 const wm_windows = @import("fetch/wm_windows.zig");
@@ -521,7 +522,7 @@ fn linuxResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinResolution(allocator: std.mem.Allocator) ![]const u8 {
-    return resolution.getResolution(allocator);
+    return resolution_macos.getResolution(allocator);
 }
 
 fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
@@ -529,12 +530,7 @@ fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsResolution(allocator: std.mem.Allocator) ![]const u8 {
-    var width = try execCommand(allocator, &[_][]const u8{ "wmic", "path", "Win32_VideoController", "get", "CurrentHorizontalResolution" }, "Unknown");
-    var height = try execCommand(allocator, &[_][]const u8{ "wmic", "path", "Win32_VideoController", "get", "CurrentVerticalResolution" }, "Unknown");
-    width = std.mem.trim(u8, width, "CurrentHorizontalResolution  \r\n");
-    height = std.mem.trim(u8, height, "CurrentVerticalResolution  \r\n");
-
-    return std.fmt.allocPrint(allocator, "{s}x{s}", .{ width, height });
+    return resolution_windows.windowsResolution(allocator);
 }
 
 //================= Fetch DE =================
