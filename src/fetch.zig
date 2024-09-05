@@ -16,6 +16,7 @@ const resolution_windows = @import("fetch/resolution_windows.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
 const wm_windows = @import("fetch/wm_windows.zig");
+const theme_windows = @import("fetch/theme_windows.zig");
 const os_macos = @import("fetch/os_macos.zig");
 const os_windows = @import("fetch/os_windows.zig");
 const memory = @import("fetch/memory_macos.zig");
@@ -621,7 +622,7 @@ fn bsdTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    return try theme_windows.getWindowsTheme(allocator);
 }
 
 //================= Fetch GPU =================

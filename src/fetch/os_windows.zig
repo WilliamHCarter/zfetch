@@ -1,4 +1,3 @@
-//import std
 const std = @import("std");
 const builtin = @import("builtin");
 const windows = std.os.windows;
