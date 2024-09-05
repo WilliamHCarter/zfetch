@@ -173,12 +173,14 @@ fn bsdDevice(allocator: std.mem.Allocator) ![]const u8 {
     return execCommand(allocator, &[_][]const u8{ "uname", "-m" }, "Unknown");
 }
 
-pub fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
-    const res = try execCommand(allocator, &[_][]const u8{ "wmic", "computersystem", "get", "model" }, "Unknown");
-    var iter = std.mem.split(u8, res, "\n");
-    _ = iter.next();
+fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
+    const sub_key = std.unicode.utf8ToUtf16LeStringLiteral("HARDWARE\\DESCRIPTION\\System\\BIOS");
+    const value = std.unicode.utf8ToUtf16LeStringLiteral("SystemProductName");
 
-    return iter.next() orelse "Unknown";
+    const reg_key = try regkey.openRegistryKey(windows.HKEY_LOCAL_MACHINE, sub_key);
+    defer _ = windows.advapi32.RegCloseKey(reg_key);
+
+    return regkey.queryRegistryValue(allocator, reg_key, value);
 }
 
 //================= Fetch Kernel =================
