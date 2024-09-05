@@ -16,7 +16,8 @@ const resolution_windows = @import("fetch/resolution_windows.zig");
 const gpu = @import("fetch/gpu_macos.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
 const wm_windows = @import("fetch/wm_windows.zig");
-const os = @import("fetch/os_macos.zig");
+const os_macos = @import("fetch/os_macos.zig");
+const os_windows = @import("fetch/os_windows.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const cwin = if (builtin.os.tag == .windows) @cImport({
@@ -112,7 +113,7 @@ fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
-    const os_struct = os.parseOS(allocator) catch return "Macos";
+    const os_struct = os_macos.parseOS(allocator) catch return "Macos";
     const os_name = os_struct.name;
     const os_version_name = os_struct.version;
     const os_version = os_struct.buildVersion;
@@ -124,19 +125,7 @@ fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn windowsOS(allocator: std.mem.Allocator) ![]const u8 {
-    var version_info: windows.RTL_OSVERSIONINFOW = undefined;
-    version_info.dwOSVersionInfoSize = @sizeOf(@TypeOf(version_info));
-
-    const status = windows.ntdll.RtlGetVersion(&version_info);
-    if (status != windows.NTSTATUS.SUCCESS) {
-        return error.WindowsApiFailed;
-    }
-
-    return std.fmt.allocPrint(allocator, "Windows {d}.{d}.{d}", .{
-        version_info.dwMajorVersion,
-        version_info.dwMinorVersion,
-        version_info.dwBuildNumber,
-    });
+    return try os_windows.getWindowsOS(allocator);
 }
 
 //================= Fetch Host Device =================
@@ -187,22 +176,6 @@ pub fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
     _ = iter.next();
 
     return iter.next() orelse "Unknown";
-}
-
-fn getNameFromProcessorArchitecture(arch: []const u8) ?[]const u8 {
-    // switch (arch) {
-    //     c.PROCESSOR_ARCHITECTURE_AMD64 => return "x64 (AMD or Intel)",
-    //     c.PROCESSOR_ARCHITECTURE_ARM => return "ARM",
-    //     c.PROCESSOR_ARCHITECTURE_ARM64 => return "ARM64",
-    //     c.PROCESSOR_ARCHITECTURE_IA64 => return "Intel Itanium-based",
-    //     c.PROCESSOR_ARCHITECTURE_INTEL => return "x86",
-    //     c.PROCESSOR_ARCHITECTURE_UNKNOWN => return "Unknown",
-    //     else => return null,
-    // }
-    if (arch.len() == 0) {
-        return "Windows";
-    }
-    return null;
 }
 
 //================= Fetch Kernel =================
@@ -565,9 +538,11 @@ fn windowsDE(allocator: std.mem.Allocator) ![]const u8 {
 fn parseMajorVersion(version: []const u8) !u8 {
     var majorVersion: u8 = 0;
     var i: usize = 0;
+    var spaced: bool = false;
     while (i < version.len) : (i += 1) {
-        if (version[i] == '.') {
-            break;
+        if (version[i] == ' ') {
+            if (spaced) break;
+            spaced = true;
         }
         if (version[i] >= '0' and version[i] <= '9') {
             majorVersion = majorVersion * 10 + (version[i] - '0');
