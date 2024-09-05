@@ -22,6 +22,7 @@ const os_macos = @import("fetch/os_macos.zig");
 const os_windows = @import("fetch/os_windows.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
+const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @cImport({
     @cInclude("windows.h");
 }) else undefined;
@@ -233,33 +234,11 @@ fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
 fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
     const sub_key = std.unicode.utf8ToUtf16LeStringLiteral("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0");
     const value = std.unicode.utf8ToUtf16LeStringLiteral("ProcessorNameString");
-    var reg_key: windows.HKEY = undefined;
 
-    const open_res = windows.advapi32.RegOpenKeyExW(
-        windows.HKEY_LOCAL_MACHINE,
-        sub_key,
-        0,
-        windows.KEY_READ,
-        &reg_key,
-    );
+    const reg_key = try regkey.openRegistryKey(windows.HKEY_LOCAL_MACHINE, sub_key);
+    defer _ = windows.advapi32.RegCloseKey(reg_key);
 
-    if (open_res != 0) {
-        return error.UnableToOpenRegistry;
-    }
-
-    var cpu: [255]u16 = undefined;
-    var cpu_size: windows.DWORD = windows.NAME_MAX;
-    const query_res = windows.advapi32.RegQueryValueExW(reg_key, value, null, null, @as(?*windows.BYTE, @ptrCast(&cpu)), &cpu_size);
-
-    _ = windows.advapi32.RegCloseKey(reg_key);
-
-    if (query_res != 0) {
-        return error.UnableToOpenRegistry;
-    }
-
-    const result = std.unicode.utf16LeToUtf8Alloc(allocator, &cpu) catch "";
-    const index = std.mem.indexOf(u16, &cpu, &[_]u16{0}) orelse cpu.len;
-    return std.fmt.allocPrint(allocator, "{s}", .{result[0..index]});
+    return regkey.queryRegistryValue(allocator, reg_key, value);
 }
 
 //================= Fetch Memory =================
