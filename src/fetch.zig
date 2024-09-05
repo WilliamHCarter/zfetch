@@ -529,16 +529,12 @@ fn bsdResolution(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsResolution(allocator: std.mem.Allocator) ![]const u8 {
-    // const hdc = c.GetDC(null);
-    // if (hdc == null) return error.FailedToGetDC;
+    var width = try execCommand(allocator, &[_][]const u8{ "wmic", "path", "Win32_VideoController", "get", "CurrentHorizontalResolution" }, "Unknown");
+    var height = try execCommand(allocator, &[_][]const u8{ "wmic", "path", "Win32_VideoController", "get", "CurrentVerticalResolution" }, "Unknown");
+    width = std.mem.trim(u8, width, "CurrentHorizontalResolution  \r\n");
+    height = std.mem.trim(u8, height, "CurrentVerticalResolution  \r\n");
 
-    // const width = c.GetDeviceCaps(hdc, c.HORZRES);
-    // const height = c.GetDeviceCaps(hdc, c.VERTRES);
-
-    // _ = c.ReleaseDC(null, hdc);
-
-    // return std.fmt.allocPrint(allocator, "{d} x {d}", .{ width, height });
-    return std.fmt.allocPrint(allocator, "Windows", .{});
+    return std.fmt.allocPrint(allocator, "{s}x{s}", .{ width, height });
 }
 
 //================= Fetch DE =================
@@ -683,6 +679,15 @@ pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
 }
 
+fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
+    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
+    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/{s}.txt", .{ cwd, filename });
+    defer allocator.free(path);
+    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    return content;
+}
+
 fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
     // const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
     //     std.debug.print("Error executing command: {}\n", .{err});
@@ -699,12 +704,7 @@ fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
-    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/macos.txt", .{cwd});
-    defer allocator.free(path);
-    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
-    return content;
+    return try logoFetcher(allocator, "macos");
 }
 
 fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
@@ -712,12 +712,7 @@ fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
-    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/windows.txt", .{cwd});
-    defer allocator.free(path);
-    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
-    return content;
+    return try logoFetcher(allocator, "windows");
 }
 
 //================= Fetch Colors =================
