@@ -13,7 +13,8 @@ const host = @import("fetch/host_macos.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
 const resolution = @import("fetch/resolution_macos.zig");
 const gpu = @import("fetch/gpu_macos.zig");
-const wm = @import("fetch/wm_macos.zig");
+const wm_macos = @import("fetch/wm_macos.zig");
+const wm_windows = @import("fetch/wm_windows.zig");
 const os = @import("fetch/os_macos.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
@@ -595,7 +596,7 @@ fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
-    return wm.getMacosWM(allocator) catch {
+    return wm_macos.getMacosWM(allocator) catch {
         return "Call Failed";
     };
 }
@@ -605,7 +606,9 @@ fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsWM(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    return wm_windows.getWindowsWM(allocator) catch {
+        return "Call Failed";
+    };
 }
 
 //================= Fetch Theme =================
