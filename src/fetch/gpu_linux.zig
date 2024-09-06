@@ -46,20 +46,72 @@ fn getGPUInfoFromSys(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn getGPUInfoFromLspci(allocator: std.mem.Allocator) ![]const u8 {
-    const result: []const u8 = try execCommand(allocator, &[_][]const u8{ "lspci", "-mm", "-k", "-d", "::0300" }, "");
+    const result = try execCommand(allocator, &[_][]const u8{
+        "lspci", "-mm",
+    }, "");
+    defer allocator.free(result);
+
+    var gpu_list = std.ArrayList([]const u8).init(allocator);
+    defer gpu_list.deinit();
 
     var lines = std.mem.split(u8, result, "\n");
     while (lines.next()) |line| {
-        var fields = std.mem.split(u8, line, "\"");
-        _ = fields.next();
-        if (fields.next()) |vendor| {
-            if (fields.next()) |_| {
-                if (fields.next()) |device| {
-                    return try std.fmt.allocPrint(allocator, "{s} {s}", .{ vendor, device });
-                }
-            }
+        if (isGPULine(line)) {
+            const gpu_info = try extractGPUInfo(allocator, line);
+            try gpu_list.append(gpu_info);
         }
     }
 
+    if (gpu_list.items.len >= 2) {
+        if (std.mem.startsWith(u8, gpu_list.items[0], "Intel") and std.mem.startsWith(u8, gpu_list.items[1], "Intel")) {
+            _ = gpu_list.orderedRemove(0);
+        }
+    }
+
+    if (gpu_list.items.len > 0) {
+        return try std.mem.join(allocator, " / ", gpu_list.items);
+    }
+
     return "GPU Not Found";
+}
+
+fn isGPULine(line: []const u8) bool {
+    return std.mem.indexOf(u8, line, "Display") != null or
+        std.mem.indexOf(u8, line, "3D") != null or
+        std.mem.indexOf(u8, line, "VGA") != null;
+}
+
+fn extractGPUInfo(allocator: std.mem.Allocator, line: []const u8) ![]const u8 {
+    var fields = std.mem.split(u8, line, "\"");
+    var field_index: usize = 0;
+    var device_name: ?[]const u8 = null;
+    var subsystem_name: ?[]const u8 = null;
+
+    while (fields.next()) |field| {
+        switch (field_index) {
+            3 => device_name = field,
+            5 => {
+                if (field.len > 0 and !std.mem.startsWith(u8, field, "Device ")) {
+                    subsystem_name = field;
+                }
+            },
+            7 => {
+                if (subsystem_name == null) {
+                    subsystem_name = field;
+                }
+            },
+            else => {},
+        }
+        field_index += 1;
+    }
+
+    if (device_name) |name| {
+        if (subsystem_name) |subsys| {
+            return try std.fmt.allocPrint(allocator, "{s} {s}", .{ name, subsys });
+        } else {
+            return try allocator.dupe(u8, name);
+        }
+    }
+
+    return "Unknown GPU";
 }
