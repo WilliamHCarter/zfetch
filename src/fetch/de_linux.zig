@@ -7,7 +7,7 @@ pub fn printDE(allocator: std.mem.Allocator, name: []const u8, version: []const 
     return std.fmt.allocPrint(allocator, "{s} {s}\n", .{ name, version });
 }
 
-fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
+pub fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
     var name: []const u8 = undefined;
     var version: []const u8 = undefined;
 

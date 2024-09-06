@@ -7,6 +7,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const info = @import("info.zig");
+const cpu_linux = @import("fetch/cpu_linux.zig");
 const packages_macos = @import("fetch/packages_macos.zig");
 const packages_windows = @import("fetch/packages_windows.zig");
 const packages_linux = @import("fetch/packages_linux.zig");
@@ -19,9 +20,12 @@ const resolution_linux = @import("fetch/resolution_linux.zig");
 const de_linux = @import("fetch/de_linux.zig");
 const gpu_macos = @import("fetch/gpu_macos.zig");
 const gpu_windows = @import("fetch/gpu_windows.zig");
+const gpu_linux = @import("fetch/gpu_linux.zig");
 const wm_macos = @import("fetch/wm_macos.zig");
 const wm_windows = @import("fetch/wm_windows.zig");
+const wm_linux = @import("fetch/wm_linux.zig");
 const theme_windows = @import("fetch/theme_windows.zig");
+const theme_linux = @import("fetch/theme_linux.zig");
 const os_macos = @import("fetch/os_macos.zig");
 const os_windows = @import("fetch/os_windows.zig");
 const memory = @import("fetch/memory_macos.zig");
@@ -109,7 +113,7 @@ fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
     var buf: [1024]u8 = undefined;
     const contents = try file.readAll(&buf);
 
-    var iter = std.mem.split(contents, "\n");
+    var iter = std.mem.split(u8, contents, "\n");
     while (iter.next()) |line| {
         if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
             return std.mem.trim(u8, line[12..], "\"");
@@ -226,7 +230,7 @@ pub fn getCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "lscpu", "-p=cpu" }, "Unknown");
+    return try cpu_linux.getLinuxCPU(allocator);
 }
 
 fn darwinCPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -577,7 +581,9 @@ pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "echo", "$XDG_CURRENT_DESKTOP" }, "Unknown");
+    return wm_linux.getLinuxWM(allocator) catch {
+        return "Fetch Error";
+    };
 }
 
 fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
@@ -602,7 +608,7 @@ pub fn getTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "echo", "$GTK_THEME" }, "Unknown");
+    return try theme_linux.getLinuxTheme(allocator);
 }
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
@@ -650,7 +656,7 @@ pub fn getGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxGPU(allocator: std.mem.Allocator) ![]const u8 {
-    return execCommand(allocator, &[_][]const u8{ "lspci", "-v" }, "Unknown");
+    return gpu_linux.getLinuxGPU(allocator);
 }
 
 fn darwinGPU(allocator: std.mem.Allocator) ![]const u8 {
