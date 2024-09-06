@@ -27,7 +27,6 @@ fn getGPUInfoFromSys(allocator: std.mem.Allocator) ![]const u8 {
         if (std.mem.startsWith(u8, entry.name, "card") and !std.mem.endsWith(u8, entry.name, "-")) {
             const path = try std.fs.path.join(allocator, &[_][]const u8{ "/sys/class/drm", entry.name, "device", "product_name" });
             defer allocator.free(path);
-
             const file = std.fs.openFileAbsolute(path, .{}) catch continue;
             defer file.close();
 

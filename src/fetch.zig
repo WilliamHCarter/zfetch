@@ -11,7 +11,8 @@ const cpu_linux = @import("fetch/cpu_linux.zig");
 const packages_macos = @import("fetch/packages_macos.zig");
 const packages_windows = @import("fetch/packages_windows.zig");
 const packages_linux = @import("fetch/packages_linux.zig");
-const host = @import("fetch/host_macos.zig");
+const host_macos = @import("fetch/host_macos.zig");
+const host_linux = @import("fetch/host_linux.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
 const terminal_linux = @import("fetch/terminal_linux.zig");
 const resolution_macos = @import("fetch/resolution_macos.zig");
@@ -28,6 +29,7 @@ const theme_windows = @import("fetch/theme_windows.zig");
 const theme_linux = @import("fetch/theme_linux.zig");
 const os_macos = @import("fetch/os_macos.zig");
 const os_windows = @import("fetch/os_windows.zig");
+const os_linux = @import("fetch/os_linux.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
@@ -103,21 +105,9 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
-    // const os_release = "/etc/os-release";
-    // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
-    // defer file.close();
+    return try os_linux.getLinuxOS(allocator);
 
-    // var buf: [1024]u8 = undefined;
-    // const contents = try file.readAll(&buf);
-
-    // var iter = std.mem.split(u8, contents, "\n");
-    // while (iter.next()) |line| {
-    //     if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
-    //         return std.mem.trim(u8, line[12..], "\"");
-    //     }
-    // }
-
-    return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
+    // return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
 }
 
 fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
@@ -142,36 +132,11 @@ pub fn getHostDevice(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxDevice(allocator: std.mem.Allocator) ![]const u8 {
-
-    // // Check for DMI information
-    // const board_vendor = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_vendor") catch "Unknown";
-    // const board_name = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/board_name") catch "Unknown";
-    // if (!std.mem.eql(u8, board_vendor, "Unknown") or !std.mem.eql(u8, board_name, "Unknown")) {
-    //     return std.fmt.allocPrint(allocator, "{s} {s}", .{ board_vendor, board_name });
-    // }
-
-    // const product_name = std.fs.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/product_name") catch "Unknown";
-    // const product_version = std.fs.file.readFileToOwnedString(allocator, "/sys/devices/virtual/dmi/id/product_version") catch "Unknown";
-    // if (!std.mem.eql(u8, product_name, "Unknown") or !std.mem.eql(u8, product_version, "Unknown")) {
-    //     return std.fmt.allocPrint(allocator, "{s} {s}", .{ product_name, product_version });
-    // }
-    // // Check for firmware model
-    // const firmware_model = std.fs.readFileToOwnedString(allocator, "/sys/firmware/devicetree/base/model") catch "Unknown";
-    // if (!std.mem.eql(u8, firmware_model, "Unknown")) {
-    //     return firmware_model;
-    // }
-
-    // // Check for temporary model information
-    // const tmp_model = std.fs.readFileToOwnedString(allocator, "/tmp/sysinfo/model") catch "Unknown";
-    // if (!std.mem.eql(u8, tmp_model, "Unknown")) {
-    //     return tmp_model;
-    // }
-
-    return execCommand(allocator, &[_][]const u8{ "uname", "-m" }, "Unknown");
+    return try host_linux.getLinuxHost(allocator);
 }
 
 fn darwinDevice(allocator: std.mem.Allocator) ![]const u8 {
-    return host.getHost(allocator);
+    return host_macos.getHost(allocator);
 }
 
 fn bsdDevice(allocator: std.mem.Allocator) ![]const u8 {
@@ -231,7 +196,7 @@ fn linuxCPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinCPU(allocator: std.mem.Allocator) ![]const u8 {
-    return host.sysctlGetString(allocator, "machdep.cpu.brand_string");
+    return host_macos.sysctlGetString(allocator, "machdep.cpu.brand_string");
 }
 
 fn bsdCPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -683,18 +648,16 @@ fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
-    // const os_name = execCommand(allocator, &[_][]const u8{ "sw_vers", "-productName" }, "macOS") catch |err| {
-    //     std.debug.print("Error executing command: {}\n", .{err});
-    //     return "Unknown Linux Distro";
-    // };
-    // var os_name_lower = try allocator.alloc(u8, os_name.len);
-    // var idx: usize = 0;
-    // for (os_name) |char| {
-    //     os_name_lower[idx] = std.ascii.toLower(char);
-    //     idx += 1;
-    // }
-    // return os_name_lower;
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+    const xdg_current_desktop = try std.process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
+    var distro = try allocator.dupe(u8, "linux");
+    if (xdg_current_desktop.len > 0) {
+        var desktops = std.mem.split(u8, xdg_current_desktop, ":");
+        if (desktops.next()) |desktop| {
+            distro = try allocator.dupe(u8, desktop);
+        }
+    }
+
+    return try logoFetcher(allocator, distro);
 }
 
 fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
