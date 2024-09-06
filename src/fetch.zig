@@ -31,10 +31,7 @@ const os_windows = @import("fetch/os_windows.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
-const cwin = if (builtin.os.tag == .windows) @cImport({
-    @cInclude("windows.h");
-}) else undefined;
-
+const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig");
 //================= Helper Functions =================
 pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
     return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
@@ -106,19 +103,19 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
-    const os_release = "/etc/os-release";
-    const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
-    defer file.close();
+    // const os_release = "/etc/os-release";
+    // const file = std.fs.openFileAbsolute(os_release, .{}) catch return "Linux";
+    // defer file.close();
 
-    var buf: [1024]u8 = undefined;
-    const contents = try file.readAll(&buf);
+    // var buf: [1024]u8 = undefined;
+    // const contents = try file.readAll(&buf);
 
-    var iter = std.mem.split(u8, contents, "\n");
-    while (iter.next()) |line| {
-        if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
-            return std.mem.trim(u8, line[12..], "\"");
-        }
-    }
+    // var iter = std.mem.split(u8, contents, "\n");
+    // while (iter.next()) |line| {
+    //     if (std.mem.startsWith(u8, line, "PRETTY_NAME=")) {
+    //         return std.mem.trim(u8, line[12..], "\"");
+    //     }
+    // }
 
     return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
 }

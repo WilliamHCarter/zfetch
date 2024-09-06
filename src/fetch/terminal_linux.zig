@@ -34,15 +34,15 @@ fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: Termi
 }
 
 fn fetchFromEnv(allocator: std.mem.Allocator, info: *TerminalInfo) !bool {
-    _ = try envFetchHelper(allocator, info, initTerm("Gnome", "GNOME Terminal", "GNOME_TERMINAL_SCREEN"));
-    _ = try envFetchHelper(allocator, info, initTerm("Konsole", "Konsole", "KONSOLE_VERSION"));
-    _ = try envFetchHelper(allocator, info, initTerm("XTerm", "XTerm", "XTERM_VERSION"));
-    _ = try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_LOG"));
-    _ = try envFetchHelper(allocator, info, initTerm("Terminator", "Terminator", "TERMINATOR_UUID"));
-    _ = try envFetchHelper(allocator, info, initTerm("Kitty", "Kitty", "KITTY_WINDOW_ID"));
-    _ = try envFetchHelper(allocator, info, initTerm("Tmux", "Tmux", "TMUX"));
-    _ = try envFetchHelper(allocator, info, initTerm("Screen", "GNU Screen", "STY"));
-    _ = try envFetchHelper(allocator, info, initTerm("SSH", "SSH", "SSH_TTY"));
+    if (try envFetchHelper(allocator, info, initTerm("Gnome", "GNOME Terminal", "GNOME_TERMINAL_SERVICE"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Konsole", "Konsole", "KONSOLE_VERSION"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("XTerm", "XTerm", "XTERM_VERSION"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_LOG"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Terminator", "Terminator", "TERMINATOR_UUID"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Kitty", "Kitty", "KITTY_WINDOW_ID"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Tmux", "Tmux", "TMUX"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Screen", "GNU Screen", "STY"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("SSH", "SSH", "SSH_TTY"))) return true;
 
     if (std.process.getEnvVarOwned(allocator, "TERM_PROGRAM")) |term_program| {
         defer allocator.free(term_program);

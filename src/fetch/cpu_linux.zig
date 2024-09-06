@@ -1,6 +1,6 @@
 const std = @import("std");
 
-fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
+pub fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
     const file = try std.fs.openFileAbsolute("/proc/cpuinfo", .{});
     defer file.close();
 
@@ -13,13 +13,13 @@ fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
 
     while (lines.next()) |line| {
         if (std.mem.indexOf(u8, line, "model name")) |_| {
-            const parts = std.mem.split(u8, line, ":");
+            var parts = std.mem.split(u8, line, ":");
             _ = parts.next();
             if (parts.next()) |value| {
                 model_name = std.mem.trim(u8, value, " \t");
             }
         } else if (std.mem.indexOf(u8, line, "cpu cores")) |_| {
-            const parts = std.mem.split(u8, line, ":");
+            var parts = std.mem.split(u8, line, ":");
             _ = parts.next();
             if (parts.next()) |value| {
                 cpu_cores = std.mem.trim(u8, value, " \t");

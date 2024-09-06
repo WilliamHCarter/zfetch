@@ -35,14 +35,14 @@ fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: Termi
 }
 
 fn fetchFromEnv(allocator: std.mem.Allocator, info: *TerminalInfo) !bool {
-    _ = try envFetchHelper(allocator, info, initTerm("WindowsTerminal", "Windows Terminal", "WT_SESSION"));
-    _ = try envFetchHelper(allocator, info, initTerm("SSH", "SSH", "SSH_TTY"));
-    _ = try envFetchHelper(allocator, info, initTerm("MSYS", "MSYS", "MSYSTEM"));
-    _ = try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_SOCKET"));
-    _ = try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_LOG"));
-    _ = try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_WINDOW_ID"));
-    _ = try envFetchHelper(allocator, info, initTerm("TERM", "", "TERM"));
-    _ = try envFetchHelper(allocator, info, initTerm("ConEmu", "ConEmu", "ConEmuPID"));
+    if (try envFetchHelper(allocator, info, initTerm("WindowsTerminal", "Windows Terminal", "WT_SESSION"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("SSH", "SSH", "SSH_TTY"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("MSYS", "MSYS", "MSYSTEM"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_SOCKET"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_LOG"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("Alacritty", "Alacritty", "ALACRITTY_WINDOW_ID"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("TERM", "", "TERM"))) return true;
+    if (try envFetchHelper(allocator, info, initTerm("ConEmu", "ConEmu", "ConEmuPID"))) return true;
 
     if (std.process.getEnvVarOwned(allocator, "TERM_PROGRAM")) |term_program| {
         defer allocator.free(term_program);
