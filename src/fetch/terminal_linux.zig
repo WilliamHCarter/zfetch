@@ -1,16 +1,14 @@
 const std = @import("std");
+const execCommand = @import("../fetch.zig").execCommand;
 
-pub const TerminalInfo = struct {
-    name: []const u8,
-    pretty_name: []const u8,
-    env_var: []const u8,
-};
+pub const TerminalInfo = struct { name: []const u8, pretty_name: []const u8, env_var: []const u8, version: ?[]const u8 };
 
 fn initTerm(name: []const u8, pretty_name: []const u8, env_var: []const u8) TerminalInfo {
     return TerminalInfo{
         .name = name,
         .pretty_name = pretty_name,
         .env_var = env_var,
+        .version = null,
     };
 }
 
@@ -24,8 +22,9 @@ fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: Termi
     if (std.process.getEnvVarOwned(allocator, temp.env_var)) |env_value| {
         defer allocator.free(env_value);
         info.name = try allocator.dupe(u8, temp.name);
+        info.version = try getTerminalVersion(allocator, temp);
         info.pretty_name = if (temp.pretty_name.len > 0)
-            try std.fmt.allocPrint(allocator, "{s} ({s})", .{ temp.pretty_name, env_value })
+            try std.fmt.allocPrint(allocator, "{s} {s}", .{ temp.pretty_name, info.version.? })
         else
             try allocator.dupe(u8, env_value);
         return true;
@@ -69,4 +68,22 @@ fn fetchFromEnv(allocator: std.mem.Allocator, info: *TerminalInfo) !bool {
     }
 
     return false;
+}
+
+fn getTerminalVersion(allocator: std.mem.Allocator, info: TerminalInfo) ![]const u8 {
+    if (std.mem.eql(u8, info.name, "Konsole") or
+        std.mem.eql(u8, info.name, "XTerm") or
+        std.mem.eql(u8, info.name, "Kitty"))
+    {
+        return try allocator.dupe(u8, info.env_var);
+    }
+
+    if (std.mem.eql(u8, info.name, "Gnome")) {
+        const res = try execCommand(allocator, &[_][]const u8{ "gnome-terminal", "--version" }, "");
+        const version_start = std.mem.indexOf(u8, res, "GNOME Terminal ") orelse return error.VersionNotFound;
+        const version_end = std.mem.indexOfPos(u8, res, version_start + "GNOME Terminal ".len, " ") orelse res.len;
+        return try allocator.dupe(u8, res[version_start + "GNOME Terminal ".len .. version_end]);
+    }
+
+    return try allocator.dupe(u8, "Unknown");
 }
