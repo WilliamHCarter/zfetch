@@ -455,8 +455,7 @@ pub fn getTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    const term = terminal_linux.fetchTerminal(allocator) catch return "Fetch Error";
-    return term.pretty_name;
+    return try terminal_linux.getLinuxTerminal(allocator);
 }
 
 fn darwinTerminal(allocator: std.mem.Allocator) ![]const u8 {

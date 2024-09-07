@@ -1,7 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
 const fs = std.fs;
-const process = std.process;
 const ArrayList = std.ArrayList;
 const execCommand = @import("../fetch.zig").execCommand;
 
@@ -33,6 +32,13 @@ fn getWaylandWM(allocator: mem.Allocator) ![]const u8 {
         "westeros",   "westford", "weston",  "wdisplays", "wio",
     };
 
+    const process_list = try execCommand(allocator, &[_][]const u8{ "ps", "-e" }, "");
+    for (wayland_wms) |wm| {
+        if (std.mem.indexOf(u8, process_list, wm)) |_| {
+            return try allocator.dupe(u8, wm);
+        }
+    }
+
     const socket_path = try getWaylandSocketPath(allocator);
     defer allocator.free(socket_path);
 
@@ -44,13 +50,6 @@ fn getWaylandWM(allocator: mem.Allocator) ![]const u8 {
     const fuser_pid = try execCommand(allocator, &[_][]const u8{ "fuser", socket_path }, "");
     if (fuser_pid.len > 0) {
         return try getProcessName(allocator, fuser_pid);
-    }
-
-    const process_list = try execCommand(allocator, &[_][]const u8{ "ps", "-e" }, "");
-    for (wayland_wms) |wm| {
-        if (std.mem.indexOf(u8, process_list, wm)) |_| {
-            return try allocator.dupe(u8, wm);
-        }
     }
 
     return error.WaylandWMNotFound;

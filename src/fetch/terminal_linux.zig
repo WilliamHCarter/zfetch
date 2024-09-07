@@ -12,19 +12,19 @@ fn initTerm(name: []const u8, pretty_name: []const u8, env_var: []const u8) Term
     };
 }
 
-pub fn fetchTerminal(allocator: std.mem.Allocator) !TerminalInfo {
+pub fn getLinuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
     var info = initTerm("", "Unknown", "");
-    if (try fetchFromEnv(allocator, &info)) return info;
-    return info;
+    _ = fetchFromEnv(allocator, &info) catch "Unknown";
+    const version = getTerminalVersion(allocator, info) catch "";
+    return std.fmt.allocPrint(allocator, "{s} {s}", .{ info.pretty_name, version });
 }
 
 fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: TerminalInfo) !bool {
     if (std.process.getEnvVarOwned(allocator, temp.env_var)) |env_value| {
         defer allocator.free(env_value);
         info.name = try allocator.dupe(u8, temp.name);
-        info.version = try getTerminalVersion(allocator, temp);
         info.pretty_name = if (temp.pretty_name.len > 0)
-            try std.fmt.allocPrint(allocator, "{s} {s}", .{ temp.pretty_name, info.version.? })
+            try std.fmt.allocPrint(allocator, "{s}", .{temp.pretty_name})
         else
             try allocator.dupe(u8, env_value);
         return true;

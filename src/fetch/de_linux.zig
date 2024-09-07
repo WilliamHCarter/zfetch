@@ -53,13 +53,14 @@ fn getKDEVersion(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn getGNOMEVersion(allocator: std.mem.Allocator) ![]const u8 {
-    const fullVersion = try execCommand(allocator, &[_][]const u8{ "gnome-shell", "--version" }, "");
-    defer allocator.free(fullVersion);
+    const quick_version = execCommand(allocator, &[_][]const u8{ "gsettings", "get", "org.gnome.shell", "welcome-dialog-last-shown-version" }, "") catch "";
+    if (quick_version.len > 0) return std.mem.trim(u8, quick_version, "\'");
 
-    const versionStart = std.mem.indexOf(u8, fullVersion, "GNOME Shell ") orelse 0;
-    const trimmedVersion = std.mem.trim(u8, fullVersion[versionStart + 11 ..], &std.ascii.whitespace);
+    const full_version = try execCommand(allocator, &[_][]const u8{ "gnome-shell", "--version" }, "");
+    const version_start = std.mem.indexOf(u8, full_version, "GNOME Shell ") orelse 0;
+    const trimmed_version = std.mem.trim(u8, full_version[version_start + 11 ..], &std.ascii.whitespace);
 
-    return allocator.dupe(u8, trimmedVersion);
+    return allocator.dupe(u8, trimmed_version);
 }
 
 fn getXfceVersion(allocator: std.mem.Allocator) ![]const u8 {
