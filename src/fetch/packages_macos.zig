@@ -21,11 +21,8 @@ fn getBrewPackages(allocator: mem.Allocator) !usize {
         error.EnvironmentVariableNotFound => "/opt/homebrew",
         else => return err,
     };
-    defer allocator.free(homebrew_prefix);
 
     const cellar_path = try fs.path.join(allocator, &[_][]const u8{ homebrew_prefix, "Cellar" });
-    defer allocator.free(cellar_path);
-
     return countDirs(cellar_path);
 }
 
@@ -33,10 +30,7 @@ fn getMacPortsPackages(allocator: mem.Allocator) !usize {
     const macports_prefix = process.getEnvVarOwned(allocator, "MACPORTS_PREFIX") catch {
         return 0;
     };
-    defer allocator.free(macports_prefix);
-
     const software_path = try fs.path.join(allocator, &[_][]const u8{ macports_prefix, "var", "macports", "software" });
-    defer allocator.free(software_path);
     return countDirs(software_path);
 }
 

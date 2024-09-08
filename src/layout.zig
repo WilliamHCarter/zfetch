@@ -407,9 +407,7 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
 //❯
 fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
     const username = std.mem.trimRight(u8, try fetch.getUsername(allocator), " ");
-    defer allocator.free(username);
     const top_bar = try allocator.alloc(u8, username.len);
-    defer allocator.free(top_bar);
 
     const bar_symbol = "-";
     @memset(top_bar, bar_symbol[0]);
@@ -428,15 +426,12 @@ const LogoPosition = enum {
 
 fn processLine(line: []const u8, allocator: std.mem.Allocator, color_map: ColorMap) ![]const u8 {
     var result = try allocator.dupe(u8, line);
-    errdefer allocator.free(result);
 
     for (color_map.codes, 0..) |color_code, i| {
         const single_digit = try std.fmt.allocPrint(allocator, "${d}", .{i});
-        defer allocator.free(single_digit);
         result = try std.mem.replaceOwned(u8, allocator, result, single_digit, color_code);
 
         const curly_brace = try std.fmt.allocPrint(allocator, "${{c{d}}}", .{i});
-        defer allocator.free(curly_brace);
         result = try std.mem.replaceOwned(u8, allocator, result, curly_brace, color_code);
     }
 
@@ -523,7 +518,6 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
     const ascii_art = try fetch.getLogo(allocator);
     const color_map = ColorMap.init();
     const ascii_art_color = try colorize(allocator, ascii_art, color_map);
-    defer allocator.free(ascii_art_color);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
     const line_widths = try getLineWidths(ascii_art_color, allocator);

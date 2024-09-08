@@ -34,11 +34,8 @@ fn getChocoPackages(allocator: Allocator) !usize {
     const choco_env = process.getEnvVarOwned(allocator, "ChocolateyInstall") catch {
         return 0;
     };
-    defer allocator.free(choco_env);
 
     const choco_path = try fs.path.join(allocator, &[_][]const u8{ choco_env, "lib" });
-    defer allocator.free(choco_path);
-
     return countDirs(choco_path);
 }
 

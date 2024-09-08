@@ -14,7 +14,6 @@ pub fn getMacosWM(allocator: mem.Allocator) ![]const u8 {
     try posix.sysctl(&mib, null, &size, null, 0);
 
     const buffer = try allocator.alloc(u8, size);
-    defer allocator.free(buffer);
 
     try posix.sysctl(&mib, buffer.ptr, &size, null, 0);
 

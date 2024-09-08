@@ -5,17 +5,13 @@ const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
     const xdg_current_desktop = try process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
-    defer allocator.free(xdg_current_desktop);
 
     if (xdg_current_desktop.len > 0) {
         var desktops = std.mem.split(u8, xdg_current_desktop, ":");
         _ = desktops.next(); // Skip the first entry (distro)
 
         const name = try allocator.dupe(u8, desktops.next() orelse "");
-        defer allocator.free(name);
-
         const version = try getDEVersion(allocator, name);
-        defer if (version.len > 0) allocator.free(version);
 
         return std.fmt.allocPrint(allocator, "{s} {s}", .{ name, version });
     }
@@ -120,12 +116,10 @@ fn readVersionFromFile(allocator: std.mem.Allocator, file_path: []const u8, sear
 
 fn detectDEFallback(allocator: std.mem.Allocator) ![]const u8 {
     const desktop_session = try process.getEnvVarOwned(allocator, "DESKTOP_SESSION");
-    defer allocator.free(desktop_session);
 
     if (desktop_session.len > 0) {
         const name = try allocator.dupe(u8, fs.path.basename(desktop_session));
         const version = try getDEVersion(allocator, name);
-        defer if (version.len > 0) allocator.free(version);
         return std.fmt.allocPrint(allocator, "{s} {s}", .{ name, version });
     }
     return allocator.dupe(u8, "Unknown");

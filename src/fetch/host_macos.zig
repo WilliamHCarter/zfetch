@@ -6,10 +6,7 @@ const info = @import("../info.zig");
 
 pub fn getHost(allocator: std.mem.Allocator) []const u8 {
     const model = sysctlGetString(allocator, "hw.model") catch "Fetch Error";
-    defer allocator.free(model);
-
-    const name = getNameFromHwModel(model) orelse model;
-    return name;
+    return getNameFromHwModel(model) orelse model;
 }
 
 pub fn sysctlGetString(allocator: std.mem.Allocator, name: [:0]const u8) ![]const u8 {
@@ -19,10 +16,7 @@ pub fn sysctlGetString(allocator: std.mem.Allocator, name: [:0]const u8) ![]cons
 
     var buf = try allocator.alloc(u8, len);
     const result = c.sysctlbyname(name.ptr, buf.ptr, &len, null, 0);
-    if (result != 0) {
-        allocator.free(buf);
-        return error.SysctlFailed;
-    }
+    if (result != 0) return error.SysctlFailed;
 
     return buf[0 .. len - 1];
 }

@@ -5,7 +5,6 @@ pub fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
     defer file.close();
 
     const content = try file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(content);
 
     var lines = std.mem.split(u8, content, "\n");
     var model_name: ?[]const u8 = null;

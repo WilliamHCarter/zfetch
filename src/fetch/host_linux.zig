@@ -38,7 +38,7 @@ pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
 
     if (mem.startsWith(u8, host.name, "Standard PC")) {
         var nameBuffer = try allocator.alloc(u8, host.name.len + 9);
-        defer allocator.free(nameBuffer);
+
         @memcpy(nameBuffer[0..9], "KVM/QEMU ");
         @memcpy(nameBuffer[9..], host.name);
         host.name = try allocator.dupe(u8, nameBuffer);

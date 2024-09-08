@@ -40,8 +40,6 @@ fn getWaylandWM(allocator: mem.Allocator) ![]const u8 {
     }
 
     const socket_path = try getWaylandSocketPath(allocator);
-    defer allocator.free(socket_path);
-
     const lsof_pid = try execCommand(allocator, &[_][]const u8{ "lsof", "-t", socket_path }, "");
     if (lsof_pid.len > 0) {
         return try getProcessName(allocator, lsof_pid);
@@ -86,9 +84,7 @@ fn getX11WMUsingXprop(allocator: mem.Allocator) ![]const u8 {
 
 fn getWaylandSocketPath(allocator: mem.Allocator) ![]const u8 {
     const xdg_runtime_dir = try std.process.getEnvVarOwned(allocator, "XDG_RUNTIME_DIR");
-    defer allocator.free(xdg_runtime_dir);
     const wayland_display = try std.process.getEnvVarOwned(allocator, "WAYLAND_DISPLAY");
-    defer allocator.free(wayland_display);
 
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ xdg_runtime_dir, wayland_display });
 }
@@ -99,7 +95,6 @@ fn getProcessName(allocator: mem.Allocator, pid: []const u8) ![]const u8 {
 
 fn renameWM(allocator: mem.Allocator, wm: []const u8) ![]const u8 {
     const lowercased = try std.ascii.allocLowerString(allocator, wm);
-    defer allocator.free(lowercased);
 
     if (std.mem.indexOf(u8, lowercased, "windowmaker") != null) {
         return try allocator.dupe(u8, "wmaker");

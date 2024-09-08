@@ -15,24 +15,15 @@ fn getGPUInfoFromSys(allocator: std.mem.Allocator) ![]const u8 {
     defer dir.close();
 
     var gpu_list = std.ArrayList([]const u8).init(allocator);
-    defer {
-        for (gpu_list.items) |item| {
-            allocator.free(item);
-        }
-        gpu_list.deinit();
-    }
 
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
         if (std.mem.startsWith(u8, entry.name, "card") and !std.mem.endsWith(u8, entry.name, "-")) {
             const path = try std.fs.path.join(allocator, &[_][]const u8{ "/sys/class/drm", entry.name, "device", "product_name" });
-            defer allocator.free(path);
             const file = std.fs.openFileAbsolute(path, .{}) catch continue;
             defer file.close();
 
             const content = file.readToEndAlloc(allocator, 1024) catch continue;
-            defer allocator.free(content);
-
             const trimmed = std.mem.trim(u8, content, &std.ascii.whitespace);
             try gpu_list.append(try allocator.dupe(u8, trimmed));
         }
@@ -49,7 +40,6 @@ fn getGPUInfoFromLspci(allocator: std.mem.Allocator) ![]const u8 {
     const result = try execCommand(allocator, &[_][]const u8{
         "lspci", "-mm",
     }, "");
-    defer allocator.free(result);
 
     var gpu_list = std.ArrayList([]const u8).init(allocator);
     defer gpu_list.deinit();

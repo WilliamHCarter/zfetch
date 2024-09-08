@@ -11,14 +11,12 @@ pub fn getLinuxOS(allocator: mem.Allocator) ![]const u8 {
     }
 
     if (try readFile(allocator, "/etc/os-release")) |content| {
-        defer allocator.free(content);
         if (getValueFromOSRelease(content, "PRETTY_NAME")) |prettyName| {
             return try std.fmt.allocPrint(allocator, "{s} {s}", .{ prettyName, uname.machine });
         }
     }
 
     if (try readFile(allocator, "/etc/lsb-release")) |content| {
-        defer allocator.free(content);
         if (getValueFromLsbRelease(content, "DISTRIB_DESCRIPTION")) |description| {
             return try std.fmt.allocPrint(allocator, "{s} {s}", .{ description, uname.machine });
         }

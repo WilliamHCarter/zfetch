@@ -9,7 +9,6 @@ pub fn getLinuxResolution(allocator: std.mem.Allocator) ![]const u8 {
         const result = try execCommand(allocator, &[_][]const u8{
             "xrandr", "--nograb", "--current",
         }, "");
-        defer allocator.free(result);
 
         var lines = std.mem.split(u8, result, "\n");
         while (lines.next()) |line| {
@@ -20,7 +19,6 @@ pub fn getLinuxResolution(allocator: std.mem.Allocator) ![]const u8 {
         }
     } else if (hasCommand(allocator, "xdpyinfo")) {
         const result = try execCommand(allocator, &[_][]const u8{ "sh", "-c", "xdpyinfo | grep dimensions: " }, "");
-        defer allocator.free(result);
 
         var lines = std.mem.split(u8, result, "\n");
         while (lines.next()) |line| {

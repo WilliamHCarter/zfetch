@@ -8,7 +8,6 @@ const c = @cImport({
 fn cfStringToZigString(allocator: std.mem.Allocator, cfString: c.CFStringRef) ![]const u8 {
     const length = c.CFStringGetLength(cfString);
     const buffer = try allocator.alloc(u16, @intCast(length));
-    defer allocator.free(buffer);
 
     c.CFStringGetCharacters(cfString, c.CFRangeMake(0, length), buffer.ptr);
 

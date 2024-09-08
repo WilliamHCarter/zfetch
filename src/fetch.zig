@@ -65,8 +65,8 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
 
     const stdout = child.stdout orelse return fallback;
     const result = try stdout.reader().readAllAlloc(allocator, 8192);
-    defer allocator.free(result);
     const trimmed_result = std.mem.trim(u8, result, "\n");
+
     return allocator.dupe(u8, trimmed_result);
 }
 
@@ -223,8 +223,6 @@ fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
     defer file.close();
 
     const content = try file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(content);
-
     var memTotal: u64 = 0;
     var memAvailable: u64 = 0;
 
@@ -306,7 +304,6 @@ fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
 
 fn getBootTime(allocator: std.mem.Allocator) !i64 {
     const output = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
-    defer allocator.free(output);
     var iter = std.mem.split(u8, output, "=");
     _ = iter.next();
     const boot_time_str = iter.next() orelse return error.BootTimeNotFound;
@@ -414,22 +411,17 @@ pub fn posixShell(allocator: std.mem.Allocator) ![]const u8 {
     };
 
     const shell_path = try std.process.getEnvVarOwned(allocator, "SHELL");
-    defer allocator.free(shell_path);
     const shell_name = std.fs.path.basename(shell_path);
 
     for (shells) |shell| {
         if (std.mem.eql(u8, shell_name, shell.name)) {
             const version = try execCommand(allocator, &.{ shell_path, "-c", shell.command }, "Unknown");
-            defer allocator.free(version);
             const trimmed_version = try shellTrim(shell, version);
-            defer allocator.free(trimmed_version);
             return try std.fmt.allocPrint(allocator, "{s} {s}", .{ shell_name, trimmed_version });
         }
     }
 
     const version = try execCommand(allocator, &.{ shell_path, "--version" }, "Unknown");
-    defer allocator.free(version);
-
     return try std.fmt.allocPrint(allocator, "{s} {s}", .{ shell_name, version });
 }
 
@@ -641,9 +633,8 @@ fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
     const path = try std.fmt.allocPrint(allocator, "{s}/ascii/{s}.txt", .{ cwd, filename });
-    defer allocator.free(path);
-    const content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
-    return content;
+
+    return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
@@ -720,8 +711,6 @@ pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
 
 pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
     const username = fetchEnvVar(allocator, "USER");
-    defer allocator.free(username);
-
     var hostname_buffer: [std.posix.HOST_NAME_MAX]u8 = undefined;
     const hostname = try std.posix.gethostname(&hostname_buffer);
 
