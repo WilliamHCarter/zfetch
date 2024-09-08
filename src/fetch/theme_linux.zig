@@ -2,85 +2,37 @@ const std = @import("std");
 const getLinuxDE = @import("de_linux.zig").getLinuxDE;
 const execCommand = @import("../fetch.zig").execCommand;
 
+const DEThemeCommand = struct {
+    name: []const u8,
+    command: []const []const u8,
+};
+
+const de_theme_commands = [_]DEThemeCommand{
+    .{ .name = "GNOME", .command = &[_][]const u8{ "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme" } },
+    .{ .name = "KDE", .command = &[_][]const u8{ "kreadconfig5", "--group", "General", "--key", "Name", "--file", "kdeglobals" } },
+    .{ .name = "Xfce", .command = &[_][]const u8{ "xfconf-query", "-c", "xsettings", "-p", "/Net/ThemeName" } },
+    .{ .name = "MATE", .command = &[_][]const u8{ "gsettings", "get", "org.mate.interface", "gtk-theme" } },
+    .{ .name = "Cinnamon", .command = &[_][]const u8{ "gsettings", "get", "org.cinnamon.desktop.interface", "gtk-theme" } },
+    .{ .name = "Budgie", .command = &[_][]const u8{ "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme" } },
+    .{ .name = "LXQt", .command = &[_][]const u8{ "lxqt-config-appearance", "--get-gtk-theme" } },
+    .{ .name = "Unity", .command = &[_][]const u8{ "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme" } },
+};
+
+fn getThemeFromCommand(allocator: std.mem.Allocator, command: []const []const u8) ![]const u8 {
+    const result = try execCommand(allocator, command, "");
+    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
+}
+
 pub fn getLinuxTheme(allocator: std.mem.Allocator) ![]const u8 {
     const de_info = try getLinuxDE(allocator);
-
     var de_iter = std.mem.split(u8, de_info, " ");
     const de_name = de_iter.next() orelse return "Unknown";
 
-    if (std.mem.eql(u8, de_name, "GNOME")) {
-        return try getGnomeTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "KDE")) {
-        return try getKDETheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "Xfce")) {
-        return try getXfceTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "MATE")) {
-        return try getMateTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "Cinnamon")) {
-        return try getCinnamonTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "Budgie")) {
-        return try getBudgieTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "LXQt")) {
-        return try getLXQtTheme(allocator);
-    } else if (std.mem.eql(u8, de_name, "Unity")) {
-        return try getUnityTheme(allocator);
+    for (de_theme_commands) |de_command| {
+        if (std.mem.eql(u8, de_name, de_command.name)) {
+            return try getThemeFromCommand(allocator, de_command.command);
+        }
     }
 
     return "Unknown";
-}
-
-fn getGnomeTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
-}
-
-fn getKDETheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "kreadconfig5", "--group", "General", "--key", "Name", "--file", "kdeglobals",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, " \n"));
-}
-
-fn getXfceTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "xfconf-query", "-c", "xsettings", "-p", "/Net/ThemeName",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, " \n"));
-}
-
-fn getMateTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "gsettings", "get", "org.mate.interface", "gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
-}
-
-fn getCinnamonTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "gsettings", "get", "org.cinnamon.desktop.interface", "gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
-}
-
-fn getBudgieTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
-}
-
-fn getLXQtTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "lxqt-config-appearance", "--get-gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, " \n"));
-}
-
-fn getUnityTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const result = try execCommand(allocator, &[_][]const u8{
-        "gsettings", "get", "org.gnome.desktop.interface", "gtk-theme",
-    }, "");
-    return allocator.dupe(u8, std.mem.trim(u8, result, "'\" \n"));
 }

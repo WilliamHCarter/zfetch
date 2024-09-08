@@ -64,7 +64,7 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
     try child.spawn();
 
     const stdout = child.stdout orelse return fallback;
-    const result = try stdout.reader().readAllAlloc(allocator, 8192);
+    const result = try stdout.reader().readAllAlloc(allocator, 32768);
     const trimmed_result = std.mem.trim(u8, result, "\n");
 
     return allocator.dupe(u8, trimmed_result);
@@ -534,8 +534,8 @@ pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
-    return wm_linux.getLinuxWM(allocator) catch {
-        return "Fetch Error";
+    return wm_linux.getLinuxWM(allocator) catch |err| {
+        return std.fmt.allocPrint(allocator, "Fetch Error: {any}", .{err});
     };
 }
 
