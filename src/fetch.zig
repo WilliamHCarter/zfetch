@@ -91,9 +91,9 @@ fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
 fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
     const os_struct = os_macos.parseOS(allocator) catch return "Macos";
     const os_name = os_struct.name;
-    const os_version_name = os_struct.version;
-    const os_version = os_struct.buildVersion;
-    return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{ os_name, os_version_name, os_version }) catch "Macos";
+    const os_version_name = info.darwinVersionName(os_struct.version) catch "";
+    const os_version = os_struct.build_version;
+    return std.fmt.allocPrint(allocator, "{s} {s} {s} {s}", .{ os_name, os_version_name, os_struct.version, os_version }) catch "Macos";
 }
 
 fn bsdOS(allocator: std.mem.Allocator) ![]const u8 {
