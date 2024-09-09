@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) void {
     if (builtin.os.tag == .macos) {
         exe.linkFramework("CoreGraphics");
         exe.linkFramework("CoreFoundation");
+        exe.linkFramework("CoreVideo");
         exe.linkFramework("IOKit");
     }
 

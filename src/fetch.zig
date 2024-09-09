@@ -543,8 +543,8 @@ fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
-    const global_preferences = try std.fs.path.join(allocator, &[_][]const u8{
-        std.process.getEnvVarOwned(allocator, "HOME"),
+    const global_preferences = std.fs.path.join(allocator, &[_][]const u8{
+        try std.process.getEnvVarOwned(allocator, "HOME"),
         "Library",
         "Preferences",
         ".GlobalPreferences.plist",

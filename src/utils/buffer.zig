@@ -89,6 +89,21 @@ pub const Buffer = struct {
         try self.addRow();
     }
 
+    pub fn addComponentMultiRow(self: *Buffer, color: []const u8, label: []const u8, data: []const u8) !void {
+        const formatted_label = try std.fmt.allocPrint(self.allocator, "{s}{s}:\x1b[0m ", .{ color, label });
+        defer self.allocator.free(formatted_label);
+
+        var lines = std.mem.split(u8, data, "\n");
+        while (lines.next()) |line| {
+            const trimmed_line = std.mem.trim(u8, line, " \t\r\n");
+            if (trimmed_line.len == 0) continue;
+            try self.write(self.current_row, self.segment_offsets.items[self.current_row], formatted_label);
+            try self.write(self.current_row, self.segment_offsets.items[self.current_row] + formatted_label.len, trimmed_line);
+            self.segment_offsets.items[self.current_row] += formatted_label.len + trimmed_line.len;
+            try self.addRow();
+        }
+    }
+
     pub fn render(self: *const Buffer, writer: anytype) !void {
         for (self.lines.items[0..self.row_count]) |line| {
             const trimmed_line = std.mem.trimRight(u8, line, " ");

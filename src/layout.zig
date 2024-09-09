@@ -281,7 +281,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
         .Packages => try buffer.addComponentRow(Colors.Primary, "Packages", fetched_result),
         .Shell => try buffer.addComponentRow(Colors.Primary, "Shell", fetched_result),
         .Terminal => try buffer.addComponentRow(Colors.Primary, "Terminal", fetched_result),
-        .Resolution => try buffer.addComponentRow(Colors.Primary, "Resolution", fetched_result),
+        .Resolution => try buffer.addComponentMultiRow(Colors.Primary, "Resolution", fetched_result),
         .DE => try buffer.addComponentRow(Colors.Primary, "DE", fetched_result),
         .WM => try buffer.addComponentRow(Colors.Primary, "WM", fetched_result),
         .Theme => try buffer.addComponentRow(Colors.Primary, "Theme", fetched_result),
