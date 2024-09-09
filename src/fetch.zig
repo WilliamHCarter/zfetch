@@ -34,30 +34,8 @@ const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig");
+
 //================= Helper Functions =================
-pub fn fetchEnvVar(allocator: std.mem.Allocator, key: []const u8) []const u8 {
-    return std.process.getEnvVarOwned(allocator, key) catch "Unknown";
-}
-
-pub fn toFixedFloat(value: []const u8, precision: u32) []const u8 {
-    const floatValue = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch {
-        std.debug.print("Invalid float value: {s}\n", .{value});
-        return "0.0";
-    };
-
-    var buf: [64]u8 = undefined;
-    const options = std.fmt.FormatOptions{
-        .precision = precision,
-    };
-
-    const result = std.fmt.formatFloat(buf[0..], floatValue, options) catch {
-        std.debug.print("Failed to format float value: {d}\n", .{floatValue});
-        return "0.0";
-    };
-
-    return result;
-}
-
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
     var child = std.process.Child.init(argv, allocator);
     child.stdout_behavior = .Pipe;
@@ -105,9 +83,9 @@ pub fn getOS(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxOS(allocator: std.mem.Allocator) ![]const u8 {
-    return try os_linux.getLinuxOS(allocator);
-
-    // return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
+    return os_linux.getLinuxOS(allocator) catch {
+        return execCommand(allocator, &[_][]const u8{ "uname", "-sr" }, "Unknown") catch "Linux";
+    };
 }
 
 fn darwinOS(allocator: std.mem.Allocator) ![]const u8 {
@@ -434,11 +412,11 @@ fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn bsdShell(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "SHELL");
+    return std.process.getEnvVarOwned(allocator, "SHELL");
 }
 
 fn windowsShell(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "COMSPEC");
+    return std.process.getEnvVarOwned(allocator, "COMSPEC");
 }
 
 //================= Fetch Terminal =================
@@ -451,11 +429,11 @@ fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "TERM_PROGRAM");
+    return std.process.getEnvVarOwned(allocator, "TERM_PROGRAM");
 }
 
 fn bsdTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return fetchEnvVar(allocator, "TERM");
+    return std.process.getEnvVarOwned(allocator, "TERM");
 }
 
 fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
@@ -566,16 +544,14 @@ fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
     const global_preferences = try std.fs.path.join(allocator, &[_][]const u8{
-        fetchEnvVar(allocator, "HOME"),
+        std.process.getEnvVarOwned(allocator, "HOME"),
         "Library",
         "Preferences",
         ".GlobalPreferences.plist",
-    });
+    }) catch "Light";
 
-    const wm_theme = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleInterfaceStyle", global_preferences }, "Light");
-    const wm_theme_color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences, "2>/dev/null" }, "-2");
-    const theme = wm_theme catch "Light";
-    const color_str = wm_theme_color_str catch "-2";
+    const theme = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleInterfaceStyle", global_preferences }, "Light") catch "Light";
+    const color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences, "2>/dev/null" }, "-2") catch "-2";
     const color = switch (std.fmt.parseInt(i32, color_str, 10) catch -2) {
         -1 => "Graphite",
         0 => "Red",
@@ -670,21 +646,16 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
 fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
-    try result.appendSlice(switch (builtin.os.tag) {
-        .windows => "\r\n",
-        else => "\n",
-    });
 
-    for (0..8) |i| {
-        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[4{d}m   ", .{i}));
-    }
-    try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[0m", .{}));
+    const newline = if (builtin.os.tag == .windows) "\r\n" else "\n";
+    try result.appendSlice(newline);
 
-    try result.append('\n');
-    for (0..8) |i| {
-        try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[10{d}m   ", .{i}));
+    for ([_]u8{ 4, 10 }) |base| {
+        for (0..8) |i| {
+            try result.writer().print("\x1b[{d}{d}m   ", .{ base, i });
+        }
+        try result.appendSlice("\x1b[0m\n");
     }
-    try result.appendSlice(try std.fmt.allocPrint(allocator, "\x1b[0m", .{}));
 
     return result.toOwnedSlice();
 }
@@ -710,7 +681,7 @@ pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
-    const username = fetchEnvVar(allocator, "USER");
+    const username = std.process.getEnvVarOwned(allocator, "USER") catch "Unknown";
     var hostname_buffer: [std.posix.HOST_NAME_MAX]u8 = undefined;
     const hostname = try std.posix.gethostname(&hostname_buffer);
 
@@ -718,8 +689,8 @@ pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
-    const username = fetchEnvVar(allocator, "USERNAME");
-    const hostname = fetchEnvVar(allocator, "COMPUTERNAME");
+    const username = std.process.getEnvVarOwned(allocator, "USERNAME") catch "Unknown";
+    const hostname = std.process.getEnvVarOwned(allocator, "COMPUTERNAME") catch "Unknown";
 
     return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }
