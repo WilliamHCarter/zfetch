@@ -15,13 +15,13 @@ pub const HostInfo = struct {
 
 pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
     var host = HostInfo{
-        .family = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_family") orelse "",
-        .name = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_name") orelse "",
-        .version = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_version") orelse "",
-        .sku = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_sku") orelse "",
-        .serial = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_serial") orelse "",
-        .uuid = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_uuid") orelse "",
-        .vendor = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/sys_vendor") orelse "",
+        .family = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_family"),
+        .name = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_name"),
+        .version = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_version"),
+        .sku = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_sku"),
+        .serial = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_serial"),
+        .uuid = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_uuid"),
+        .vendor = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/sys_vendor"),
     };
 
     if (host.name.len == 0) {
@@ -59,8 +59,8 @@ pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
     return std.fmt.allocPrint(allocator, "{s}", .{try joinNonEmpty(allocator, &.{ host.family, host.name, host.version })});
 }
 
-fn getCleanContent(allocator: mem.Allocator, path: []const u8) !?[]const u8 {
-    const content = try getFileContent(allocator, path) orelse return null;
+fn getCleanContent(allocator: mem.Allocator, path: []const u8) ![]const u8 {
+    const content = try getFileContent(allocator, path) orelse return "";
     return cleanPlaceholder(content);
 }
 

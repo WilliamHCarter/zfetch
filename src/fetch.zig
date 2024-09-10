@@ -33,17 +33,23 @@ const os_linux = @import("fetch/os_linux.zig");
 const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
-const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig");
+const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
 
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
     var child = std.process.Child.init(argv, allocator);
     child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
     try child.spawn();
 
     const stdout = child.stdout orelse return fallback;
+    const stderr = child.stderr orelse return fallback;
+
     const result = try stdout.reader().readAllAlloc(allocator, 32768);
     const trimmed_result = std.mem.trim(u8, result, "\n");
+
+    const stderr_result = try stderr.reader().readAllAlloc(allocator, 8192);
+    if (stderr_result.len > 0) return error.CommandError;
 
     return allocator.dupe(u8, trimmed_result);
 }

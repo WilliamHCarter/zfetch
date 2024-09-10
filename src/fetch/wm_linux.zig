@@ -54,7 +54,7 @@ fn getWaylandWM(allocator: mem.Allocator) ![]const u8 {
 }
 
 fn getX11WM(allocator: mem.Allocator) ![]const u8 {
-    const x11_wms = [_][]const u8{ "sowm", "catwm", "fvwm", "dwm", "2bwm", "monsterwm", "tinywm", "x11fs", "xmonad", "awesome", "bspwm", "budgie-wm", "cinnamon", "compiz", "deepin-wm", "enlightenment", "fluxbox", "i3", "icewm", "jwm", "marco", "metacity", "muffin", "mutter", "openbox", "pekwm", "qtile", "ratpoison", "sawfish", "spectrwm", "stumpwm", "subtle", "twm", "windowmaker", "wmaker", "wmii", "xfwm4", "xmonad" };
+    const x11_wms = [_][]const u8{ "sowm", "catwm", "fvwm", "dwm", "2bwm", "monsterwm", "tinywm", "x11fs", "xmonad", "awesome", "bspwm", "budgie-wm", "cinnamon", "compiz", "deepin-wm", "enlightenment", "fluxbox", "gnome-shell", "i3", "icewm", "jwm", "marco", "metacity", "muffin", "mutter", "openbox", "pekwm", "qtile", "ratpoison", "sawfish", "spectrwm", "stumpwm", "subtle", "twm", "windowmaker", "wmaker", "wmii", "xfwm4", "xmonad" };
 
     const process_list = try execCommand(allocator, &[_][]const u8{ "ps", "-e" }, "");
     for (x11_wms) |wm| {
