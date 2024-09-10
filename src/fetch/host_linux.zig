@@ -15,13 +15,13 @@ pub const HostInfo = struct {
 
 pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
     var host = HostInfo{
-        .family = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_family") orelse "",
-        .name = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_name") orelse "",
-        .version = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_version") orelse "",
-        .sku = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_sku") orelse "",
-        .serial = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_serial") orelse "",
-        .uuid = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/product_uuid") orelse "",
-        .vendor = try getFileContent(allocator, "/sys/devices/virtual/dmi/id/sys_vendor") orelse "",
+        .family = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_family") orelse "",
+        .name = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_name") orelse "",
+        .version = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_version") orelse "",
+        .sku = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_sku") orelse "",
+        .serial = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_serial") orelse "",
+        .uuid = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/product_uuid") orelse "",
+        .vendor = try getCleanContent(allocator, "/sys/devices/virtual/dmi/id/sys_vendor") orelse "",
     };
 
     if (host.name.len == 0) {
@@ -38,7 +38,6 @@ pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
 
     if (mem.startsWith(u8, host.name, "Standard PC")) {
         var nameBuffer = try allocator.alloc(u8, host.name.len + 9);
-
         @memcpy(nameBuffer[0..9], "KVM/QEMU ");
         @memcpy(nameBuffer[9..], host.name);
         host.name = try allocator.dupe(u8, nameBuffer);
@@ -57,11 +56,48 @@ pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
         }
     }
 
-    return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{
-        host.family,
-        host.name,
-        host.version,
-    });
+    return std.fmt.allocPrint(allocator, "{s}", .{try joinNonEmpty(allocator, &.{ host.family, host.name, host.version })});
+}
+
+fn getCleanContent(allocator: mem.Allocator, path: []const u8) !?[]const u8 {
+    const content = try getFileContent(allocator, path) orelse return null;
+    return cleanPlaceholder(content);
+}
+
+fn cleanPlaceholder(content: []const u8) ![]const u8 {
+    const placeholders = [_][]const u8{
+        "To be filled by O.E.M.",
+        "Default string",
+        "Not Specified",
+        "None",
+        "Unknown",
+    };
+
+    for (placeholders) |placeholder| {
+        if (mem.eql(u8, mem.trim(u8, content, &std.ascii.whitespace), placeholder)) {
+            return "";
+        }
+    }
+
+    return content;
+}
+
+fn joinNonEmpty(allocator: mem.Allocator, strings: []const []const u8) ![]const u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    var first = true;
+    for (strings) |s| {
+        if (s.len > 0) {
+            if (!first) {
+                try result.append(' ');
+            }
+            try result.appendSlice(s);
+            first = false;
+        }
+    }
+
+    return result.toOwnedSlice();
 }
 
 fn getFileContent(allocator: mem.Allocator, path: []const u8) !?[]const u8 {

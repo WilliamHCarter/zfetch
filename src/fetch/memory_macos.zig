@@ -29,5 +29,5 @@ pub fn getMachMemoryStats() !u64 {
     const page_size: u64 = 4096;
     const used_memory: u64 = (vm_stat.active_count + vm_stat.wire_count) * page_size;
 
-    return used_memory;
+    return used_memory * 10;
 }
