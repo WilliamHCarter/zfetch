@@ -14,5 +14,16 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    try commands.handleCommands(args, allocator);
+    if (args.len < 2) return try commands.default(allocator);
+
+    const cmd = try commands.parseCommand(args[1]);
+    switch (cmd) {
+        .Theme => try commands.loadGivenTheme(args[2..], allocator),
+        .ListThemes => try commands.listThemes(),
+        .SetTheme => try commands.setTheme(args[2..]),
+        .Component => try commands.component(args[2..]),
+        .ListComponents => try commands.listComponents(),
+        .CustomLogo => try commands.customLogo(args[2..]),
+        .Help => try commands.help(),
+    }
 }

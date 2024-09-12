@@ -32,7 +32,7 @@ pub const Component = struct {
     }
 };
 
-const ComponentKind = enum {
+pub const ComponentKind = enum {
     Username,
     OS,
     Hostname,
@@ -53,11 +53,11 @@ const ComponentKind = enum {
     Colors,
 };
 
-const Theme = struct {
+pub const Theme = struct {
     name: []const u8,
     components: std.ArrayList(Component),
 
-    fn init(name: []const u8) Theme {
+    pub fn init(name: []const u8) Theme {
         return .{
             .name = name,
             .components = std.ArrayList(Component).init(std.heap.page_allocator),
@@ -110,7 +110,6 @@ pub fn loadTheme(name: []const u8) !Theme {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
     const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}", .{ cwd, name });
-
     const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
     const theme = try parseTheme(content);
     return theme;
@@ -132,7 +131,7 @@ fn parseTheme(content: []const u8) !Theme {
     return theme;
 }
 
-fn parseComponent(component_str: []const u8) !Component {
+pub fn parseComponent(component_str: []const u8) !Component {
     var parts = std.mem.split(u8, component_str, " ");
     const kind_str = parts.next() orelse return error.InvalidComponent;
     const kind = std.meta.stringToEnum(ComponentKind, kind_str) orelse return error.UnknownComponentKind;
