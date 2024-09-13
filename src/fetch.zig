@@ -611,7 +611,7 @@ pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
     return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
 }
 
-fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
+pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
     var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
     const path = try std.fmt.allocPrint(allocator, "{s}/ascii/{s}.txt", .{ cwd, filename });

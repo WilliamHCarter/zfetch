@@ -51,9 +51,15 @@ pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !v
     try layout.render(theme, allocator);
 }
 
-//TODO
 pub fn listThemes() !void {
-    std.debug.print("Listing themes...\n", .{});
+    var themesDir = try std.fs.cwd().openDir("themes", .{});
+    defer themesDir.close();
+
+    var iter = themesDir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .file) continue;
+        std.debug.print("  {s}\n", .{entry.name});
+    }
 }
 
 //TODO
@@ -67,9 +73,14 @@ pub fn component(args: []const []const u8) !void {
     std.debug.print("Displaying component: {s}\n", .{args[0]});
     var theme = layout.Theme.init("display_theme");
 
-    const cmp = try layout.parseComponent(args[0]);
+    const cmp = layout.parseComponent(args[0]) catch |err| {
+        std.debug.print("Failed to load component {s}: {any}\n", .{ args[0], err });
+        return;
+    };
     try theme.components.append(cmp);
-    try layout.render(theme, std.heap.page_allocator);
+    layout.render(theme, std.heap.page_allocator) catch |err| {
+        std.debug.print("Failed to render component {s}: {any}\n", .{ args[0], err });
+    };
 }
 
 pub fn listComponents() !void {
