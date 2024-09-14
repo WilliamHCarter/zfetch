@@ -20,7 +20,7 @@ pub fn main() !void {
     switch (cmd) {
         .Theme => try commands.loadGivenTheme(args[2..], allocator),
         .ListThemes => try commands.listThemes(),
-        .SetTheme => try commands.setTheme(args[2..]),
+        .SetTheme => try commands.setTheme(args[2]),
         .Component => try commands.component(args[2..]),
         .ListComponents => try commands.listComponents(),
         .CustomLogo => try commands.customLogo(args[2..]),

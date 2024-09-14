@@ -62,10 +62,29 @@ pub fn listThemes() !void {
     }
 }
 
-//TODO
-pub fn setTheme(args: []const []const u8) !void {
-    if (args.len == 0) return CommandError.MissingArgument;
-    std.debug.print("Setting theme to: {s}\n", .{args[0]});
+pub fn setTheme(new_default: []const u8) !void {
+    const allocator = std.heap.page_allocator;
+    const themes_dir = "themes/";
+    var dir = try std.fs.openDirAbsolute(themes_dir, .{});
+    defer dir.close();
+
+    var itr = dir.iterate();
+    while (try itr.next()) |entry| {
+        if (entry.kind != .file) continue;
+
+        const is_current_default = entry.name[0] == '*';
+        const name_without_star = if (is_current_default) entry.name[1..] else entry.name;
+
+        if (std.mem.eql(u8, name_without_star, new_default)) {
+            if (!is_current_default) {
+                const new_name = try std.fmt.allocPrint(allocator, "*{s}", .{entry.name});
+                defer allocator.free(new_name);
+                try dir.rename(entry.name, dir, new_name);
+            }
+        } else if (is_current_default) {
+            try dir.rename(entry.name, dir, name_without_star);
+        }
+    }
 }
 
 pub fn component(args: []const []const u8) !void {
