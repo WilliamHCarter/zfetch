@@ -79,10 +79,13 @@ pub fn setTheme(new_default: []const u8) !void {
             if (!is_current_default) {
                 const new_name = try std.fmt.allocPrint(allocator, "*{s}", .{entry.name});
                 defer allocator.free(new_name);
-                try dir.rename(entry.name, dir, new_name);
+                try dir.rename(entry.name, new_name);
             }
         } else if (is_current_default) {
-            try dir.rename(entry.name, dir, name_without_star);
+            try dir.rename(
+                entry.name,
+                name_without_star,
+            );
         }
     }
 }
@@ -109,9 +112,30 @@ pub fn listComponents() !void {
     }
 }
 
-//TODO
-pub fn customLogo(args: []const []const u8) !void {
+pub fn customLogo(args: []const []const u8, allocator: std.mem.Allocator) !void {
     if (args.len == 0) return CommandError.MissingArgument;
+
+    const logo_path = args[0];
+    const file = std.fs.cwd().openFile(logo_path, .{}) catch |err| {
+        std.debug.print("Failed to open logo file '{s}': {any}\n", .{ logo_path, err });
+        return CommandError.FileNotFound;
+    };
+    defer file.close();
+
+    const file_contents = file.readToEndAlloc(allocator, 1024 * 1024) catch |err| {
+        std.debug.print("Failed to read logo file '{s}': {any}\n", .{ logo_path, err });
+        return err;
+    };
+    defer allocator.free(file_contents);
+
+    var theme = layout.Theme.init("custom_logo_theme");
+    const logo_component = layout.Component{
+        .kind = .Logo,
+        .content = file_contents,
+    };
+    try theme.components.append(logo_component);
+
+    try layout.render(theme, allocator);
 }
 
 pub fn help() !void {

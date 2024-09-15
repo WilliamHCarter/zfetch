@@ -23,7 +23,7 @@ pub fn main() !void {
         .SetTheme => try commands.setTheme(args[2]),
         .Component => try commands.component(args[2..]),
         .ListComponents => try commands.listComponents(),
-        .CustomLogo => try commands.customLogo(args[2..]),
+        .CustomLogo => try commands.customLogo(args[2..], allocator),
         .Help => try commands.help(),
     }
 }
