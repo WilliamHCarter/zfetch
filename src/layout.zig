@@ -287,7 +287,7 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
         .CPU => try buffer.addComponentRow(Colors.Primary, "CPU", fetched_result),
         .GPU => try buffer.addComponentRow(Colors.Primary, "GPU", fetched_result),
         .Memory => try buffer.addComponentRow(Colors.Primary, "Memory", renderMemory(component, allocator)),
-        .Logo => try renderLogo(component.properties.get("position") orelse "inline", buffer, allocator),
+        .Logo => try renderLogo(component, buffer, allocator),
         .TopBar => try renderTopBar(allocator, buffer),
         .Colors => try renderColors(buffer, allocator),
     }
@@ -513,8 +513,8 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: Colo
     return result.toOwnedSlice();
 }
 
-fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const ascii_art = try fetch.getLogo(allocator);
+fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
+    const ascii_art = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
     const color_map = ColorMap.init();
     const ascii_art_color = try colorize(allocator, ascii_art, color_map);
 
@@ -523,6 +523,8 @@ fn renderLogo(position: []const u8, buffer: *buf.Buffer, allocator: std.mem.Allo
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
     const padding = 3;
+    const position = logo.properties.get("position") orelse "inline";
+
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top, .Bottom, .Inline => {
             var row: usize = 0;

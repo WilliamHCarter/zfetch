@@ -29,7 +29,7 @@ pub fn parseCommand(cmd: []const u8) !Command {
     if (std.mem.eql(u8, cmd, "--component")) return .Component;
     if (std.mem.eql(u8, cmd, "-c")) return .Component;
     if (std.mem.eql(u8, cmd, "--list-components")) return .ListComponents;
-    if (std.mem.eql(u8, cmd, "--custom-logo")) return .CustomLogo;
+    if (std.mem.eql(u8, cmd, "--logo")) return .CustomLogo;
     if (std.mem.eql(u8, cmd, "--help")) return .Help;
     if (std.mem.eql(u8, cmd, "-h")) return .Help;
     return CommandError.InvalidCommand;
@@ -115,25 +115,10 @@ pub fn listComponents() !void {
 pub fn customLogo(args: []const []const u8, allocator: std.mem.Allocator) !void {
     if (args.len == 0) return CommandError.MissingArgument;
 
-    const logo_path = args[0];
-    const file = std.fs.cwd().openFile(logo_path, .{}) catch |err| {
-        std.debug.print("Failed to open logo file '{s}': {any}\n", .{ logo_path, err });
-        return CommandError.FileNotFound;
-    };
-    defer file.close();
-
-    const file_contents = file.readToEndAlloc(allocator, 1024 * 1024) catch |err| {
-        std.debug.print("Failed to read logo file '{s}': {any}\n", .{ logo_path, err });
-        return err;
-    };
-    defer allocator.free(file_contents);
-
     var theme = layout.Theme.init("custom_logo_theme");
-    const logo_component = layout.Component{
-        .kind = .Logo,
-        .content = file_contents,
-    };
-    try theme.components.append(logo_component);
+    const comp_name = try std.fmt.allocPrint(allocator, "Logo image={s}", .{args[0]});
+    defer allocator.free(comp_name);
+    try theme.components.append(try layout.parseComponent(comp_name));
 
     try layout.render(theme, allocator);
 }

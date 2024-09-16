@@ -607,8 +607,9 @@ fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 //================= Fetch Logo =================
-pub fn getLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
+pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
+    if (std.mem.eql(u8, image, "")) return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
+    return logoFetcher(allocator, image);
 }
 
 pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
