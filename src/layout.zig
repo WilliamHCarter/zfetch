@@ -106,10 +106,7 @@ const ColorMap = struct {
 };
 //================================== Parsing ===================================
 
-pub fn loadTheme(name: []const u8) !Theme {
-    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}", .{ cwd, name });
+pub fn loadTheme(path: []const u8) !Theme {
     const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
     const theme = try parseTheme(content);
     return theme;
@@ -225,7 +222,8 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     const start_time = try timer.startLap("render");
     var buffer = try buf.Buffer.init(allocator, 150);
     defer buffer.deinit();
-    std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
+    // std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
+    std.sort.insertion(FetchResult, fetch_results.items, theme, componentOrder);
 
     var logo_index: ?usize = null;
     for (fetch_results.items, 0..) |result, idx| {
@@ -258,6 +256,9 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
     for (theme.components.items) |component| {
+        if (a.component.kind == b.component.kind) {
+            return true;
+        }
         if (component.kind == a.component.kind) {
             return true;
         } else if (component.kind == b.component.kind) {
