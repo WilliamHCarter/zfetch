@@ -34,6 +34,7 @@ const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
+const ascii_colors = @import("utils/colors.zig");
 
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
@@ -617,7 +618,32 @@ pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const 
     const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
     const path = try std.fmt.allocPrint(allocator, "{s}/ascii/{s}.txt", .{ cwd, filename });
 
-    return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    //Place the logo color scheme at top of ascii
+    const logo_colors = try getLogoColors(allocator, filename);
+    const file_content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    const result = try std.mem.concat(allocator, u8, &[_][]const u8{ logo_colors, file_content });
+
+    return result;
+}
+
+fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
+    var logo_colors: []const u8 = "";
+    for (ascii_colors.logos) |logo| {
+        for (logo.names) |name| {
+            if (std.mem.eql(u8, name, filename)) {
+                var color_strs = try allocator.alloc([]const u8, logo.colors.len);
+
+                for (logo.colors, 0..) |color, i| {
+                    color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
+                }
+
+                logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
+                break;
+            }
+        }
+        if (logo_colors.len > 0) break;
+    }
+    return logo_colors;
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {

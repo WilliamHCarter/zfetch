@@ -104,6 +104,7 @@ const ColorMap = struct {
         };
     }
 };
+
 //================================== Parsing ===================================
 
 pub fn loadTheme(path: []const u8) !Theme {
@@ -220,7 +221,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     }
 
     const start_time = try timer.startLap("render");
-    var buffer = try buf.Buffer.init(allocator, 150);
+    var buffer = try buf.Buffer.init(allocator, 512);
     defer buffer.deinit();
     // std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
     std.sort.insertion(FetchResult, fetch_results.items, theme, componentOrder);
@@ -251,7 +252,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     const stdout = std.io.getStdOut().writer();
     try buffer.render(stdout);
     try timer.endLap("render", start_time);
-    try timer.printResults(stdout);
+    // try timer.printResults(stdout);
 }
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
@@ -415,6 +416,7 @@ fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
     try buffer.append(top_bar);
     // try buffer.addComponentRow(Colors.Tertiary, top_bar, " ");
 }
+
 //============================== Logo Rendering ================================
 const LogoPosition = enum {
     Top,
@@ -461,7 +463,13 @@ fn getMaxWidth(ascii_art: []const u8, allocator: std.mem.Allocator) usize {
     return max;
 }
 
-fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: ColorMap) ![]u8 {
+fn intToANSI(allocator: std.mem.Allocator, index: usize, scheme: []const usize) ![]const u8 {
+    if (index == 0 or index > scheme.len) return error.IndexOutOfBounds;
+    const num = scheme[index - 1];
+    return try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{num});
+}
+
+fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: []usize) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
 
@@ -472,7 +480,7 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: Colo
         if (ascii_art[i] == '\n') {
             try result.append('\n');
             if (current_color) |color| {
-                try result.appendSlice(color_map.codes[color]);
+                try result.appendSlice(try intToANSI(allocator, color, color_scheme));
             }
             i += 1;
             continue;
@@ -499,7 +507,7 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: Colo
             }
 
             if (new_color) |color| {
-                try result.appendSlice(color_map.codes[color]);
+                try result.appendSlice(try intToANSI(allocator, color, color_scheme));
                 current_color = color;
                 i += skip;
                 continue;
@@ -514,10 +522,35 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_map: Colo
     return result.toOwnedSlice();
 }
 
+fn splitColors(allocator: std.mem.Allocator, ascii_art: *[]const u8) ![]usize {
+    const newline_index = std.mem.indexOf(u8, ascii_art.*, "\n") orelse return error.NoColorInfo;
+    const color_string = ascii_art.*[0..newline_index];
+
+    ascii_art.* = ascii_art.*[newline_index + 1 ..];
+
+    var color_iter = std.mem.split(u8, color_string, ",");
+    var color_count: usize = 0;
+    while (color_iter.next()) |_| {
+        color_count += 1;
+    }
+
+    var colors = try allocator.alloc(usize, color_count);
+
+    color_iter.reset();
+    var i: usize = 0;
+    while (color_iter.next()) |color_str| {
+        colors[i] = try std.fmt.parseInt(usize, color_str, 10);
+        i += 1;
+    }
+
+    return colors;
+}
+
 fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    const ascii_art = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
-    const color_map = ColorMap.init();
-    const ascii_art_color = try colorize(allocator, ascii_art, color_map);
+    var ascii_art = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
+    const color_scheme = try splitColors(allocator, &ascii_art);
+    std.debug.print("color scheme: {any}\n", .{color_scheme});
+    const ascii_art_color = try colorize(allocator, ascii_art, color_scheme);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
     const line_widths = try getLineWidths(ascii_art_color, allocator);
