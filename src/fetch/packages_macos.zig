@@ -4,16 +4,26 @@ const mem = std.mem;
 const process = std.process;
 
 pub fn getMacosPackages(allocator: mem.Allocator) ![]const u8 {
-    const brew_count = try getBrewPackages(allocator);
-    const macports_count = try getMacPortsPackages(allocator);
+    var list = std.ArrayList(u8).init(allocator);
+    defer list.deinit();
 
-    var buffer: [20]u8 = undefined;
-    const len = try std.fmt.bufPrint(&buffer, "{}", .{brew_count + macports_count});
+    var has_previous = false;
 
-    const formatted_str = try allocator.alloc(u8, len.len);
-    @memcpy(formatted_str, buffer[0..len.len]);
+    const brew_count = getBrewPackages(allocator) catch 0;
+    if (brew_count != 0) {
+        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (brew)", .{brew_count}));
+        has_previous = true;
+    }
 
-    return formatted_str;
+    const macports_count = getMacPortsPackages(allocator) catch 0;
+    if (macports_count != 0) {
+        if (has_previous) {
+            try list.appendSlice(", ");
+        }
+        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (macports)", .{macports_count}));
+    }
+
+    return list.toOwnedSlice();
 }
 
 fn getBrewPackages(allocator: mem.Allocator) !usize {

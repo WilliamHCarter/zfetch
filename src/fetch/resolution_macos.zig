@@ -26,11 +26,11 @@ pub fn getResolution(allocator: std.mem.Allocator) ![]const u8 {
                 display.resolution[1],
                 display.refresh_rate,
                 if (display.scaled_resolution) |scaled|
-                    try std.fmt.allocPrint(allocator, " (scaled as {d}x{d})", .{ scaled[0], scaled[1] })
+                    try std.fmt.allocPrint(allocator, " (as {d}x{d})", .{ scaled[0], scaled[1] })
                 else
                     "",
                 display.type,
-                if (display.is_main) " [Main]" else "",
+                if (display.is_main and displays.len > 1) " [Main]" else "",
             },
         );
         try result.appendSlice(line);

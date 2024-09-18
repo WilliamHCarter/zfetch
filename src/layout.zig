@@ -466,7 +466,7 @@ fn getMaxWidth(ascii_art: []const u8, allocator: std.mem.Allocator) usize {
 fn intToANSI(allocator: std.mem.Allocator, index: usize, scheme: []const usize) ![]const u8 {
     if (index == 0 or index > scheme.len) return error.IndexOutOfBounds;
     const num = scheme[index - 1];
-    return try std.fmt.allocPrint(allocator, "\x1b[{d}m", .{num});
+    return try std.fmt.allocPrint(allocator, "\x1b[{d};1m", .{num});
 }
 
 fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: []usize) ![]u8 {
@@ -549,7 +549,6 @@ fn splitColors(allocator: std.mem.Allocator, ascii_art: *[]const u8) ![]usize {
 fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     var ascii_art = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
     const color_scheme = try splitColors(allocator, &ascii_art);
-    std.debug.print("color scheme: {any}\n", .{color_scheme});
     const ascii_art_color = try colorize(allocator, ascii_art, color_scheme);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
