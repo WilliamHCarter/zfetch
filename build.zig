@@ -7,6 +7,11 @@ pub fn build(b: *std.Build) void {
         .target = b.host,
     });
 
+    // Embed themes
+    const embed_themes = b.addOptions();
+    embed_themes.addOption([]const u8, "default_theme", @embedFile("themes/default.txt"));
+    embed_themes.addOption([]const u8, "minimal_theme", @embedFile("themes/minimal.txt"));
+
     // Link CoreGraphics framework
     if (builtin.os.tag == .macos) {
         exe.linkFramework("CoreGraphics");

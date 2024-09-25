@@ -1,6 +1,12 @@
 const std = @import("std");
 const layout = @import("layout.zig");
 const fetch = @import("fetch.zig");
+const themes = @import("themes");
+
+const embedded_themes = std.StaticStringMap([]const u8).init(.{
+    .{ "default", themes.default_theme },
+    .{ "minimal", themes.minimal_theme },
+}, std.heap.page_allocator);
 
 const Command = enum {
     Theme,
@@ -27,7 +33,6 @@ pub fn parseCommand(cmd: []const u8) !Command {
         .{ "-t", .Theme },
         .{ "--list-themes", .ListThemes },
         .{ "-l", .ListThemes },
-        .{ "--set-theme", .SetTheme },
         .{ "--component", .Component },
         .{ "-c", .Component },
         .{ "--list-components", .ListComponents },
@@ -48,6 +53,10 @@ pub fn default(allocator: std.mem.Allocator) !void {
 }
 
 pub fn loadDefaultTheme(allocator: std.mem.Allocator) !layout.Theme {
+    if (embedded_themes.get("default")) |theme_content| {
+        return layout.parseTheme(theme_content);
+    }
+
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
 
@@ -60,7 +69,7 @@ pub fn loadDefaultTheme(allocator: std.mem.Allocator) !layout.Theme {
     var iter = themes_dir.iterate();
     const theme_file = while (try iter.next()) |entry| {
         if (entry.kind != .file) continue;
-        if (entry.name[0] == '*') break entry.name;
+        if (std.mem.eql(u8, entry.name, "default")) break entry.name;
         if (entry.name[0] != '.') break entry.name;
     } else return error.NoThemeFound;
 
@@ -81,41 +90,9 @@ pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !v
 }
 
 pub fn listThemes() !void {
-    var themesDir = try std.fs.cwd().openDir("themes", .{});
-    defer themesDir.close();
-
-    var iter = themesDir.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .file) continue;
-        std.debug.print("  {s}\n", .{entry.name});
-    }
-}
-
-pub fn setTheme(new_default: []const u8) !void {
-    const allocator = std.heap.page_allocator;
-    const themes_dir = "themes/";
-    var dir = try std.fs.openDirAbsolute(themes_dir, .{});
-    defer dir.close();
-
-    var itr = dir.iterate();
-    while (try itr.next()) |entry| {
-        if (entry.kind != .file) continue;
-
-        const is_current_default = entry.name[0] == '*';
-        const name_without_star = if (is_current_default) entry.name[1..] else entry.name;
-
-        if (std.mem.eql(u8, name_without_star, new_default)) {
-            if (!is_current_default) {
-                const new_name = try std.fmt.allocPrint(allocator, "*{s}", .{entry.name});
-                defer allocator.free(new_name);
-                try dir.rename(entry.name, new_name);
-            }
-        } else if (is_current_default) {
-            try dir.rename(
-                entry.name,
-                name_without_star,
-            );
-        }
+    var embedded_iter = embedded_themes.iterator();
+    while (embedded_iter.next()) |entry| {
+        std.debug.print("  {s}\n", .{entry.key});
     }
 }
 

@@ -1,0 +1,12 @@
+<Username>
+<TopBar>
+<OS>
+<Hostname>
+<Terminal>
+<Resolution>
+<CPU>
+<GPU>
+<Memory>
+<Colors>
+<Logo position=Left image=xenia>
+
