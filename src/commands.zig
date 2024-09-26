@@ -1,12 +1,12 @@
 const std = @import("std");
 const layout = @import("layout.zig");
 const fetch = @import("fetch.zig");
-const themes = @import("themes");
+const themes = @import("embed_themes");
 
-const embedded_themes = std.StaticStringMap([]const u8).init(.{
+const embedded_themes = std.StaticStringMap([]const u8).initComptime(.{
     .{ "default", themes.default_theme },
     .{ "minimal", themes.minimal_theme },
-}, std.heap.page_allocator);
+});
 
 const Command = enum {
     Theme,
@@ -28,7 +28,7 @@ pub const CommandError = error{
 
 pub fn parseCommand(cmd: []const u8) !Command {
     const KV = struct { []const u8, Command };
-    const map = try std.StaticStringMap(Command).init([_]KV{
+    const map = try std.StaticStringMap(Command).initComptime([_]KV{
         .{ "--theme", .Theme },
         .{ "-t", .Theme },
         .{ "--list-themes", .ListThemes },
@@ -39,7 +39,7 @@ pub fn parseCommand(cmd: []const u8) !Command {
         .{ "--logo", .CustomLogo },
         .{ "--help", .Help },
         .{ "-h", .Help },
-    }, std.heap.page_allocator);
+    });
 
     return map.get(cmd) orelse CommandError.InvalidCommand;
 }

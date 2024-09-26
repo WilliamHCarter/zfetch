@@ -8,5 +8,3 @@
 <GPU>
 <Memory>
 <Colors>
-<Logo position=Left image=xenia>
-
