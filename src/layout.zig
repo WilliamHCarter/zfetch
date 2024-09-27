@@ -107,9 +107,8 @@ const ColorMap = struct {
 
 //================================== Parsing ===================================
 
-pub fn loadTheme(path: []const u8) !Theme {
-    const content = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 1024 * 1024);
-    const theme = try parseTheme(content);
+pub fn loadTheme(file: []const u8) !Theme {
+    const theme = try parseTheme(file);
     return theme;
 }
 

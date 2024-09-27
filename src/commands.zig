@@ -1,17 +1,13 @@
 const std = @import("std");
 const layout = @import("layout.zig");
 const fetch = @import("fetch.zig");
-const themes = @import("embed_themes");
 
-const embedded_themes = std.StaticStringMap([]const u8).initComptime(.{
-    .{ "default", themes.default_theme },
-    .{ "minimal", themes.minimal_theme },
-});
+const default_theme = @embedFile("default_theme");
+const minimal_theme = @embedFile("minimal_theme");
 
 const Command = enum {
     Theme,
     ListThemes,
-    SetTheme,
     Component,
     ListComponents,
     CustomLogo,
@@ -28,7 +24,7 @@ pub const CommandError = error{
 
 pub fn parseCommand(cmd: []const u8) !Command {
     const KV = struct { []const u8, Command };
-    const map = try std.StaticStringMap(Command).initComptime([_]KV{
+    const map = try std.StaticStringMap(Command).init([_]KV{
         .{ "--theme", .Theme },
         .{ "-t", .Theme },
         .{ "--list-themes", .ListThemes },
@@ -39,44 +35,22 @@ pub fn parseCommand(cmd: []const u8) !Command {
         .{ "--logo", .CustomLogo },
         .{ "--help", .Help },
         .{ "-h", .Help },
-    });
+    }, std.heap.page_allocator);
 
     return map.get(cmd) orelse CommandError.InvalidCommand;
 }
 
 pub fn default(allocator: std.mem.Allocator) !void {
-    const theme = loadDefaultTheme(allocator) catch |err| {
+    const theme = loadDefaultTheme() catch |err| {
         std.debug.print("Failed to load default theme: {any}\n", .{err});
         return;
     };
     try layout.render(theme, allocator);
 }
 
-pub fn loadDefaultTheme(allocator: std.mem.Allocator) !layout.Theme {
-    if (embedded_themes.get("default")) |theme_content| {
-        return layout.parseTheme(theme_content);
-    }
-
-    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
-    defer allocator.free(cwd);
-
-    const th_path = try std.fmt.allocPrint(allocator, "{s}/themes", .{cwd});
-    defer allocator.free(th_path);
-
-    var themes_dir = try std.fs.openDirAbsolute(th_path, .{});
-    defer themes_dir.close();
-
-    var iter = themes_dir.iterate();
-    const theme_file = while (try iter.next()) |entry| {
-        if (entry.kind != .file) continue;
-        if (std.mem.eql(u8, entry.name, "default")) break entry.name;
-        if (entry.name[0] != '.') break entry.name;
-    } else return error.NoThemeFound;
-
-    const theme_path = try std.fmt.allocPrint(allocator, "{s}/themes/{s}", .{ cwd, theme_file });
-    defer allocator.free(theme_path);
-
-    return layout.loadTheme(theme_path);
+pub fn loadDefaultTheme() !layout.Theme {
+    const theme_file = default_theme;
+    return layout.loadTheme(theme_file);
 }
 
 pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !void {
@@ -90,9 +64,13 @@ pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !v
 }
 
 pub fn listThemes() !void {
-    var embedded_iter = embedded_themes.iterator();
-    while (embedded_iter.next()) |entry| {
-        std.debug.print("  {s}\n", .{entry.key});
+    var themesDir = try std.fs.cwd().openDir("themes", .{});
+    defer themesDir.close();
+
+    var iter = themesDir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .file) continue;
+        std.debug.print("  {s}\n", .{entry.name});
     }
 }
 
@@ -127,7 +105,7 @@ pub fn customLogo(args: []const []const u8, allocator: std.mem.Allocator) !void 
     };
     defer allocator.free(comp_name);
 
-    var theme = loadDefaultTheme(allocator) catch |err| {
+    var theme = loadDefaultTheme() catch |err| {
         std.debug.print("Failed to load default theme: {any}\n", .{err});
         return;
     };

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
 pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "zfetch",
@@ -8,8 +9,12 @@ pub fn build(b: *std.Build) void {
     });
 
     // Embed themes
-    const resource_file = b.path("themes/default.txt");
-    exe.addIncludePath(resource_file);
+    exe.root_module.addAnonymousImport("default_theme", .{
+        .root_source_file = b.path("themes/default.txt"),
+    });
+    exe.root_module.addAnonymousImport("minimal_theme", .{
+        .root_source_file = b.path("themes/minimal.txt"),
+    });
 
     // Link CoreGraphics framework
     if (builtin.os.tag == .macos) {
@@ -27,20 +32,4 @@ pub fn build(b: *std.Build) void {
         // exe.linkSystemLibrary("psapi");
     }
     b.installArtifact(exe);
-}
-
-fn embedThemes(b: *std.Build, options: *std.Build.Step.Options) !void {
-    const themes_dir = try std.fs.cwd().openDir("themes", .{ .iterate = true });
-
-    var theme_iter = themes_dir.iterate();
-    while (try theme_iter.next()) |entry| {
-        if (entry.kind != .file) continue;
-        if (!std.mem.endsWith(u8, entry.name, ".txt")) continue;
-
-        const theme_name = entry.name[0 .. entry.name.len - 4]; // Remove .txt extension
-        const theme_path = try std.fs.path.join(b.allocator, &[_][]const u8{ "themes", entry.name });
-        const theme_content = try std.fs.cwd().readFileAlloc(b.allocator, theme_path, 1024 * 1024); // 1MB max
-
-        options.addOption([]const u8, theme_name, theme_content);
-    }
 }
