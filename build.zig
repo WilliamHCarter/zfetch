@@ -9,12 +9,9 @@ pub fn build(b: *std.Build) void {
     });
 
     // Embed themes
-    exe.root_module.addAnonymousImport("default_theme", .{
-        .root_source_file = b.path("themes/default.txt"),
-    });
-    exe.root_module.addAnonymousImport("minimal_theme", .{
-        .root_source_file = b.path("themes/minimal.txt"),
-    });
+    embedThemes(exe, b) catch |err| {
+        std.debug.print("failed to embed themes: {any}", .{err});
+    };
 
     // Link CoreGraphics framework
     if (builtin.os.tag == .macos) {
@@ -32,4 +29,22 @@ pub fn build(b: *std.Build) void {
         // exe.linkSystemLibrary("psapi");
     }
     b.installArtifact(exe);
+}
+
+fn embedThemes(exe: *std.Build.Step.Compile, b: *std.Build) !void {
+    var dir = try std.fs.cwd().openDir("themes", .{});
+    defer dir.close();
+    var it = dir.iterate();
+    while (try it.next()) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".txt")) {
+            const theme_name = if (std.mem.endsWith(u8, entry.name, ".txt"))
+                entry.name[0 .. entry.name.len - 4]
+            else
+                entry.name;
+            std.debug.print("Adding theme: {s}\n", .{theme_name});
+            exe.root_module.addAnonymousImport(theme_name, .{
+                .root_source_file = b.path(b.pathJoin(&.{ "themes", entry.name })),
+            });
+        }
+    }
 }

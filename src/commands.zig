@@ -2,8 +2,8 @@ const std = @import("std");
 const layout = @import("layout.zig");
 const fetch = @import("fetch.zig");
 
-const default_theme = @embedFile("default_theme");
-const minimal_theme = @embedFile("minimal_theme");
+const default_theme = @embedFile("default");
+const minimal_theme = @embedFile("minimal");
 
 const Command = enum {
     Theme,
@@ -49,8 +49,7 @@ pub fn default(allocator: std.mem.Allocator) !void {
 }
 
 pub fn loadDefaultTheme() !layout.Theme {
-    const theme_file = default_theme;
-    return layout.loadTheme(theme_file);
+    return layout.loadTheme(default_theme);
 }
 
 pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !void {
