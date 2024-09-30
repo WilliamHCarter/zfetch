@@ -35,6 +35,7 @@ const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
 const ascii_colors = @import("utils/colors.zig");
+const logos = @import("logos");
 
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
@@ -608,22 +609,34 @@ fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 //================= Fetch Logo =================
+pub const Logo = struct {
+    name: []const u8,
+    content: []const u8,
+};
+
 pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
     if (std.mem.eql(u8, image, "")) return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
     return logoFetcher(allocator, image);
 }
 
 pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
-    var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-    const cwd = try std.fs.cwd().realpath(".", &cwd_buf);
-    const path = try std.fmt.allocPrint(allocator, "{s}/ascii/{s}.txt", .{ cwd, filename });
-
     //Place the logo color scheme at top of ascii
     const logo_colors = try getLogoColors(allocator, filename);
-    const file_content = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
-    const result = try std.mem.concat(allocator, u8, &[_][]const u8{ logo_colors, file_content });
+    const logo_list = try getLogoAscii();
+    var content: []const u8 = "";
+    for (logo_list.items) |item| {
+        if (std.mem.eql(u8, item.name, filename)) content = item.content;
+    }
 
-    return result;
+    return try std.mem.concat(allocator, u8, &[_][]const u8{ logo_colors, content });
+}
+
+pub fn getLogoAscii() !std.ArrayList(Logo) {
+    var logo_list = std.ArrayList(Logo).init(std.heap.page_allocator);
+    inline for (logos.logo_names) |name| {
+        try logo_list.append(Logo{ .name = name, .content = @embedFile(name) });
+    }
+    return logo_list;
 }
 
 fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
