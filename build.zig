@@ -37,63 +37,40 @@ pub fn build(b: *std.Build) void {
 }
 
 fn embedThemes(exe: *std.Build.Step.Compile, b: *std.Build) !void {
-    const wf = b.addWriteFiles();
-    var themes_zig = std.ArrayList(u8).init(b.allocator);
-    defer themes_zig.deinit();
-
-    try themes_zig.appendSlice(
-        \\const std = @import("std");
-        \\pub const theme_names = [_][]const u8{
-    );
-
-    var dir = try std.fs.cwd().openDir("themes", .{});
-    defer dir.close();
-    var it = dir.iterate();
-
-    while (try it.next()) |entry| {
-        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".txt")) {
-            const theme_name = if (std.mem.endsWith(u8, entry.name, ".txt"))
-                entry.name[0 .. entry.name.len - 4]
-            else
-                entry.name;
-            exe.root_module.addAnonymousImport(theme_name, .{
-                .root_source_file = b.path(b.pathJoin(&.{ "themes", entry.name })),
-            });
-            try themes_zig.writer().print("    \"{s}\",\n", .{theme_name});
-        }
-    }
-
-    try themes_zig.appendSlice("};");
-
-    const themes_file = wf.add("themes.zig", themes_zig.items);
-    exe.root_module.addAnonymousImport("themes", .{ .root_source_file = themes_file });
+    try generateEmbedIndexFile("themes", "themes", exe, b);
 }
 
 fn embedLogos(exe: *std.Build.Step.Compile, b: *std.Build) !void {
-    const wf = b.addWriteFiles();
-    var logos_zig = std.ArrayList(u8).init(b.allocator);
-    defer logos_zig.deinit();
+    try generateEmbedIndexFile("ascii", "logos", exe, b);
+}
 
-    try logos_zig.appendSlice(
+// Generates a file at compile time storing indexes to embedded files.
+// Currently used for indexing logos and themes.
+fn generateEmbedIndexFile(path: []const u8, filename: []const u8, exe: *std.Build.Step.Compile, b: *std.Build) !void {
+    const wf = b.addWriteFiles();
+    var file_lines = std.ArrayList(u8).init(b.allocator);
+    defer file_lines.deinit();
+
+    try file_lines.appendSlice(
         \\const std = @import("std");
-        \\pub const logo_names = [_][]const u8{
+        \\pub const names = [_][]const u8{
     );
 
-    var dir = try std.fs.cwd().openDir("ascii", .{});
+    var dir = try std.fs.cwd().openDir(path, .{});
     defer dir.close();
-    var it = dir.iterate();
+    var itr = dir.iterate();
 
-    while (try it.next()) |entry| {
+    while (try itr.next()) |entry| {
         if (entry.name[0] != '.') {
-            const logo_name = entry.name[0 .. entry.name.len - 4];
-            exe.root_module.addAnonymousImport(logo_name, .{
-                .root_source_file = b.path(b.pathJoin(&.{ "ascii", entry.name })),
+            const trimmed_name = entry.name[0 .. entry.name.len - 4];
+            exe.root_module.addAnonymousImport(trimmed_name, .{
+                .root_source_file = b.path(b.pathJoin(&.{ path, entry.name })),
             });
-            try logos_zig.writer().print("    \"{s}\",\n", .{logo_name});
+            try file_lines.writer().print("    \"{s}\",\n", .{trimmed_name});
         }
     }
-    try logos_zig.appendSlice("};");
+    try file_lines.appendSlice("};");
 
-    const logos_file = wf.add("logos.zig", logos_zig.items);
-    exe.root_module.addAnonymousImport("logos", .{ .root_source_file = logos_file });
+    const gen_file = wf.add(try std.mem.concat(std.heap.page_allocator, u8, &[_][]const u8{ filename, ".zig" }), file_lines.items);
+    exe.root_module.addAnonymousImport(filename, .{ .root_source_file = gen_file });
 }

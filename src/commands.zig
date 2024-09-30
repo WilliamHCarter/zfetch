@@ -151,7 +151,7 @@ pub const Theme = struct {
     content: []const u8,
 };
 
-pub const theme_names = themes_list.theme_names;
+pub const theme_names = themes_list.names;
 
 pub fn getAllThemes() !std.ArrayList(Theme) {
     var themes = std.ArrayList(Theme).init(std.heap.page_allocator);

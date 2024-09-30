@@ -633,7 +633,7 @@ pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const 
 
 pub fn getLogoAscii() !std.ArrayList(Logo) {
     var logo_list = std.ArrayList(Logo).init(std.heap.page_allocator);
-    inline for (logos.logo_names) |name| {
+    inline for (logos.names) |name| {
         try logo_list.append(Logo{ .name = name, .content = @embedFile(name) });
     }
     return logo_list;
@@ -642,17 +642,15 @@ pub fn getLogoAscii() !std.ArrayList(Logo) {
 fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
     var logo_colors: []const u8 = "";
     for (ascii_colors.logos) |logo| {
-        for (logo.names) |name| {
-            if (std.mem.eql(u8, name, filename)) {
-                var color_strs = try allocator.alloc([]const u8, logo.colors.len);
+        if (logo.matchNames(filename)) {
+            var color_strs = try allocator.alloc([]const u8, logo.colors.len);
 
-                for (logo.colors, 0..) |color, i| {
-                    color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
-                }
-
-                logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
-                break;
+            for (logo.colors, 0..) |color, i| {
+                color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
             }
+
+            logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
+            break;
         }
         if (logo_colors.len > 0) break;
     }

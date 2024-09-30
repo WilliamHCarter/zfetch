@@ -56,6 +56,15 @@ pub const LogoInfo = struct {
             .colors = colors,
         };
     }
+
+    pub fn matchNames(self: LogoInfo, name: []const u8) bool {
+        for (self.names) |n| {
+            if (std.mem.eql(u8, n, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 pub const logos = [_]LogoInfo{
