@@ -555,7 +555,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
     var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
     const padding = 3;
-    const position = logo.properties.get("position") orelse "inline";
+    const position = logo.properties.get("position") orelse "Inline";
 
     switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
         .Top, .Bottom, .Inline => {

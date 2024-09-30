@@ -1,9 +1,7 @@
 const std = @import("std");
 const layout = @import("layout.zig");
 const fetch = @import("fetch.zig");
-
-const default_theme = @embedFile("default");
-const minimal_theme = @embedFile("minimal");
+const themes_list = @import("themes");
 
 const Command = enum {
     Theme,
@@ -28,11 +26,13 @@ pub fn parseCommand(cmd: []const u8) !Command {
         .{ "--theme", .Theme },
         .{ "-t", .Theme },
         .{ "--list-themes", .ListThemes },
-        .{ "-l", .ListThemes },
+        .{ "-lt", .ListThemes },
         .{ "--component", .Component },
         .{ "-c", .Component },
         .{ "--list-components", .ListComponents },
+        .{ "-lc", .ListComponents },
         .{ "--logo", .CustomLogo },
+        .{ "-l", .CustomLogo },
         .{ "--help", .Help },
         .{ "-h", .Help },
     }, std.heap.page_allocator);
@@ -49,27 +49,33 @@ pub fn default(allocator: std.mem.Allocator) !void {
 }
 
 pub fn loadDefaultTheme() !layout.Theme {
-    return layout.loadTheme(default_theme);
+    const themes = try getAllThemes();
+    for (themes.items) |theme| {
+        if (std.mem.eql(u8, theme.name, "default")) {
+            return layout.loadTheme(theme.content);
+        }
+    }
+    return layout.loadTheme(themes.items[0].content);
 }
 
 pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !void {
     if (args.len == 0) return CommandError.MissingArgument;
-    const themePath = try std.fmt.allocPrint(std.heap.page_allocator, "themes/{s}.txt", .{args[0]});
-    const theme = layout.loadTheme(themePath) catch |err| {
-        std.debug.print("Failed to load theme {s}: {any}\n", .{ args[0], err });
-        return;
-    };
-    try layout.render(theme, allocator);
+    const themes = try getAllThemes();
+    for (themes.items) |theme| {
+        if (std.mem.eql(u8, theme.name, args[0])) {
+            const given_theme = layout.loadTheme(theme.content) catch |err| {
+                std.debug.print("Failed to load theme {s}: {any}\n", .{ args[0], err });
+                return;
+            };
+            try layout.render(given_theme, allocator);
+        }
+    }
 }
 
 pub fn listThemes() !void {
-    var themesDir = try std.fs.cwd().openDir("themes", .{});
-    defer themesDir.close();
-
-    var iter = themesDir.iterate();
-    while (try iter.next()) |entry| {
-        if (entry.kind != .file) continue;
-        std.debug.print("  {s}\n", .{entry.name});
+    const themes = try getAllThemes();
+    for (themes.items) |theme| {
+        std.debug.print("  {s}\n", .{theme.name});
     }
 }
 
@@ -98,7 +104,7 @@ pub fn listComponents() !void {
 pub fn customLogo(args: []const []const u8, allocator: std.mem.Allocator) !void {
     if (args.len == 0) return CommandError.MissingArgument;
     const comp_name = switch (args.len) {
-        1 => try std.fmt.allocPrint(allocator, "Logo image={s}", .{args[0]}),
+        1 => try std.fmt.allocPrint(allocator, "Logo image={s} position=Left", .{args[0]}),
         2 => try std.fmt.allocPrint(allocator, "Logo image={s} {s}", .{ args[0], args[1] }),
         else => try std.fmt.allocPrint(allocator, "Logo image={s} {s}", .{ args[0], args[1] }),
     };
@@ -130,13 +136,28 @@ pub fn help() !void {
         \\Usage: zfetch [COMMAND] [ARGS]
         \\
         \\Commands:
-        \\  -h,  --help                      Display this help information
-        \\  -t,  --theme <theme_file>        Load a specific theme file
-        \\  -l,  --list-themes               List available themes
-        \\  -c,  --component <name>          Display a specific component
-        \\       --list-components           List all available components
-        \\       --set-theme <name>          Set the theme
-        \\       --logo <file>               Use a custom ASCII art file as logo
-        \\
+        \\  -h,   --help                     Display this help information
+        \\  -t,   --theme <theme_file>       Load a specific theme file
+        \\  -l,   --logo <file>              Use a custom ASCII art file as logo
+        \\  -c,   --component <name>         Display a specific component
+        \\  -lt,  --list-themes              List available themes
+        \\  -lc,  --list-components          List all available components
     , .{});
+}
+
+//=================== Theme Helpers ===================
+pub const Theme = struct {
+    name: []const u8,
+    content: []const u8,
+};
+
+pub const theme_names = themes_list.theme_names;
+
+pub fn getAllThemes() !std.ArrayList(Theme) {
+    var themes = std.ArrayList(Theme).init(std.heap.page_allocator);
+
+    inline for (theme_names) |name| {
+        try themes.append(Theme{ .name = name, .content = @embedFile(name) });
+    }
+    return themes;
 }
