@@ -35,6 +35,7 @@ const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
 const ascii_colors = @import("utils/colors.zig");
+const Logo = @import("utils/colors.zig").LogoInfo;
 const logos = @import("logos");
 
 //================= Helper Functions =================
@@ -609,55 +610,69 @@ fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 //================= Fetch Logo =================
-pub const Logo = struct {
+pub const Ascii = struct {
     name: []const u8,
     content: []const u8,
 };
 
-pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) ![]const u8 {
-    if (std.mem.eql(u8, image, "")) return OSSwitch(allocator, linuxLogo, darwinLogo, bsdLogo, windowsLogo);
-    return logoFetcher(allocator, image);
-}
-
-pub fn logoFetcher(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
-    //Place the logo color scheme at top of ascii
-    const logo_colors = try getLogoColors(allocator, filename);
-    const logo_list = try getLogoAscii();
-    var content: []const u8 = "";
-    for (logo_list.items) |item| {
-        if (std.mem.eql(u8, item.name, filename)) content = item.content;
+pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
+    if (std.mem.eql(u8, image, "")) {
+        const result: anyerror!Logo = switch (builtin.os.tag) {
+            .linux => linuxLogo(allocator),
+            .macos => darwinLogo(),
+            .freebsd, .openbsd, .netbsd, .dragonfly => bsdLogo(),
+            .windows => windowsLogo(),
+            else => return error.UnsupportedOS,
+        };
+        return result;
     }
-
-    return try std.mem.concat(allocator, u8, &[_][]const u8{ logo_colors, content });
+    return logoFetcher(image);
 }
 
-pub fn getLogoAscii() !std.ArrayList(Logo) {
-    var logo_list = std.ArrayList(Logo).init(std.heap.page_allocator);
+pub fn logoFetcher(filename: []const u8) !Logo {
+    const ascii_list: std.ArrayList(Ascii) = try getAscii();
+    const logo = try getLogoInfo(filename);
+    for (ascii_list.items) |ascii_item| {
+        if (logo.matchNames(ascii_item.name)) {
+            return logo.addAscii(ascii_item.content);
+        }
+    }
+    return error.LogoNotFound;
+}
+
+pub fn getAscii() !std.ArrayList(Ascii) {
+    var logo_list = std.ArrayList(Ascii).init(std.heap.page_allocator);
     inline for (logos.names) |name| {
-        try logo_list.append(Logo{ .name = name, .content = @embedFile(name) });
+        try logo_list.append(Ascii{ .name = name, .content = @embedFile(name) });
     }
     return logo_list;
 }
 
-fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
-    var logo_colors: []const u8 = "";
+pub fn getLogoInfo(filename: []const u8) !Logo {
     for (ascii_colors.logos) |logo| {
         if (logo.matchNames(filename)) {
-            var color_strs = try allocator.alloc([]const u8, logo.colors.len);
-
-            for (logo.colors, 0..) |color, i| {
-                color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
-            }
-
-            logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
-            break;
+            return logo;
         }
-        if (logo_colors.len > 0) break;
     }
+    return error.LogoNotFound;
+}
+
+fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
+    const logo = try getLogoInfo(filename);
+
+    var logo_colors: []const u8 = "";
+    var color_strs = try allocator.alloc([]const u8, logo.colors.len);
+
+    for (logo.colors, 0..) |color, i| {
+        color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
+    }
+
+    logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
+
     return logo_colors;
 }
 
-fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
+fn linuxLogo(allocator: std.mem.Allocator) !Logo {
     const xdg_current_desktop = try std.process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
     var distro = try allocator.dupe(u8, "linux");
     if (xdg_current_desktop.len > 0) {
@@ -667,19 +682,19 @@ fn linuxLogo(allocator: std.mem.Allocator) ![]const u8 {
         }
     }
 
-    return try logoFetcher(allocator, distro);
+    return try logoFetcher(distro);
 }
 
-fn darwinLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return try logoFetcher(allocator, "macos");
+fn darwinLogo() !Logo {
+    return try logoFetcher("macos");
 }
 
-fn bsdLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "TODO", .{});
+fn bsdLogo() !Logo {
+    return try logoFetcher("windows");
 }
 
-fn windowsLogo(allocator: std.mem.Allocator) ![]const u8 {
-    return try logoFetcher(allocator, "windows");
+fn windowsLogo() !Logo {
+    return try logoFetcher("windows");
 }
 
 //================= Fetch Colors =================

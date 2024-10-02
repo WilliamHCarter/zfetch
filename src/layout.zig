@@ -9,7 +9,7 @@ const builtin = @import("builtin");
 const fetch = @import("fetch.zig");
 const buf = @import("utils/buffer.zig");
 const Timer = @import("utils/timer.zig").Timer;
-
+const Color = @import("utils/colors.zig").Color;
 //============================== Data Structures ===============================
 const newline = switch (builtin.os.tag) {
     .windows => "\r\n",
@@ -73,10 +73,21 @@ pub const Theme = struct {
 };
 
 const Colors = struct {
-    const Primary = "\x1b[1m\x1b[93m";
-    const Secondary = "\x1b[1m\x1b[92m";
-    const Tertiary = "\x1b[1m\x1b[91m";
+    primary: []const u8,
+    secondary: []const u8,
+
+    pub fn init(allocator: std.mem.Allocator, primary: ?usize, secondary: ?usize, fallbacks: []usize) !Colors {
+        const fallback_primary = if (fallbacks.len >= 1) fallbacks[0] else 93;
+        const fallback_secondary = if (fallbacks.len >= 2) fallbacks[1] else fallback_primary;
+
+        return Colors{
+            .primary = try std.fmt.allocPrint(allocator, "\x1b[1m\x1b[{any}m", .{primary orelse fallback_primary}),
+            .secondary = try std.fmt.allocPrint(allocator, "\x1b[1m\x1b[{any}m", .{secondary orelse fallback_secondary}),
+        };
+    }
 };
+
+pub var col: Colors = undefined;
 
 const ColorMap = struct {
     codes: [16][]const u8,
@@ -200,6 +211,34 @@ fn fetchWorker(
     }
 }
 
+fn getDistroColors(allocator: std.mem.Allocator, theme: Theme) !Colors {
+    var image: []const u8 = undefined;
+
+    for (theme.components.items) |component| {
+        if (component.kind == ComponentKind.Logo) {
+            image = component.properties.get("image") orelse "";
+        }
+    }
+    const logo = try fetch.getLogo(allocator, image);
+
+    var primary: ?usize = null;
+    var secondary: ?usize = null;
+
+    if (logo.color_primary) |color| {
+        primary = @intFromEnum(color);
+    }
+    if (logo.color_secondary) |color| {
+        secondary = @intFromEnum(color);
+    }
+
+    const colors = try allocator.alloc(usize, logo.colors.len);
+    for (logo.colors, 0..) |color, i| {
+        colors[i] = @intFromEnum(color);
+    }
+
+    return try Colors.init(allocator, primary, secondary, colors);
+}
+
 //================================ Rendering ===================================
 const FetchResult = struct {
     component: Component,
@@ -210,6 +249,11 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     var timer = try Timer.init(allocator);
     defer timer.deinit();
     timer.start();
+
+    var arn = std.heap.ArenaAllocator.init(allocator);
+    defer arn.deinit();
+    const arena = arn.allocator();
+    col = try getDistroColors(arena, theme);
 
     var fetch_results = try fetchHandler(theme, allocator, &timer);
     defer {
@@ -222,7 +266,6 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     const start_time = try timer.startLap("render");
     var buffer = try buf.Buffer.init(allocator, 512);
     defer buffer.deinit();
-    // std.sort.block(FetchResult, fetch_results.items, theme, componentOrder);
     std.sort.insertion(FetchResult, fetch_results.items, theme, componentOrder);
 
     var logo_index: ?usize = null;
@@ -273,21 +316,21 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     defer arena.deinit();
     const allocator = arena.allocator();
     switch (component.kind) {
-        .Username => try buffer.addComponentRow(Colors.Secondary, fetched_result, " "),
-        .OS => try buffer.addComponentRow(Colors.Primary, "OS", fetched_result),
-        .Hostname => try buffer.addComponentRow(Colors.Primary, "Host", fetched_result),
-        .Kernel => try buffer.addComponentRow(Colors.Primary, "Kernel", fetched_result),
-        .Uptime => try buffer.addComponentRow(Colors.Primary, "Uptime", fetched_result),
-        .Packages => try buffer.addComponentRow(Colors.Primary, "Packages", fetched_result),
-        .Shell => try buffer.addComponentRow(Colors.Primary, "Shell", fetched_result),
-        .Terminal => try buffer.addComponentRow(Colors.Primary, "Terminal", fetched_result),
-        .Resolution => try buffer.addComponentMultiRow(Colors.Primary, "Resolution", fetched_result),
-        .DE => try buffer.addComponentRow(Colors.Primary, "DE", fetched_result),
-        .WM => try buffer.addComponentRow(Colors.Primary, "WM", fetched_result),
-        .Theme => try buffer.addComponentRow(Colors.Primary, "Theme", fetched_result),
-        .CPU => try buffer.addComponentRow(Colors.Primary, "CPU", fetched_result),
-        .GPU => try buffer.addComponentRow(Colors.Primary, "GPU", fetched_result),
-        .Memory => try buffer.addComponentRow(Colors.Primary, "Memory", renderMemory(component, allocator)),
+        .Username => try buffer.addComponentRow(col.secondary, fetched_result, " "),
+        .OS => try buffer.addComponentRow(col.primary, "OS", fetched_result),
+        .Hostname => try buffer.addComponentRow(col.primary, "Host", fetched_result),
+        .Kernel => try buffer.addComponentRow(col.primary, "Kernel", fetched_result),
+        .Uptime => try buffer.addComponentRow(col.primary, "Uptime", fetched_result),
+        .Packages => try buffer.addComponentRow(col.primary, "Packages", fetched_result),
+        .Shell => try buffer.addComponentRow(col.primary, "Shell", fetched_result),
+        .Terminal => try buffer.addComponentRow(col.primary, "Terminal", fetched_result),
+        .Resolution => try buffer.addComponentMultiRow(col.primary, "Resolution", fetched_result),
+        .DE => try buffer.addComponentRow(col.primary, "DE", fetched_result),
+        .WM => try buffer.addComponentRow(col.primary, "WM", fetched_result),
+        .Theme => try buffer.addComponentRow(col.primary, "Theme", fetched_result),
+        .CPU => try buffer.addComponentRow(col.primary, "CPU", fetched_result),
+        .GPU => try buffer.addComponentRow(col.primary, "GPU", fetched_result),
+        .Memory => try buffer.addComponentRow(col.primary, "Memory", renderMemory(component, allocator)),
         .Logo => try renderLogo(component, buffer, allocator),
         .TopBar => try renderTopBar(allocator, buffer),
         .Colors => try renderColors(buffer, allocator),
@@ -412,8 +455,7 @@ fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
     const bar_symbol = "-";
     @memset(top_bar, bar_symbol[0]);
 
-    try buffer.append(top_bar);
-    // try buffer.addComponentRow(Colors.Tertiary, top_bar, " ");
+    try buffer.append(try std.mem.concat(allocator, u8, &[_][]const u8{ "\x1b[0m", top_bar }));
 }
 
 //============================== Logo Rendering ================================
@@ -471,6 +513,7 @@ fn intToANSI(allocator: std.mem.Allocator, index: usize, scheme: []const usize) 
 fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: []usize) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
+    var color_found: bool = false;
 
     var current_color: ?usize = null;
     var i: usize = 0;
@@ -488,7 +531,7 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
         if (ascii_art[i] == '$' and i + 1 < ascii_art.len) {
             var new_color: ?usize = null;
             var skip: usize = 0;
-
+            color_found = true;
             if (ascii_art[i + 1] == '{' and i + 4 < ascii_art.len and ascii_art[i + 4] == '}') {
                 // Handle ${c3} format
                 const color_index = ascii_art[i + 3] - '0';
@@ -517,37 +560,20 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
         i += 1;
     }
 
+    // Handle single color scheme
+    if (!color_found) {
+        try result.insertSlice(0, "$1");
+        return try colorize(allocator, try result.toOwnedSlice(), color_scheme);
+    }
+
     try result.appendSlice("\x1b[0m"); // Reset color at the end
     return result.toOwnedSlice();
 }
 
-fn splitColors(allocator: std.mem.Allocator, ascii_art: *[]const u8) ![]usize {
-    const newline_index = std.mem.indexOf(u8, ascii_art.*, "\n") orelse return error.NoColorInfo;
-    const color_string = ascii_art.*[0..newline_index];
-
-    ascii_art.* = ascii_art.*[newline_index + 1 ..];
-
-    var color_iter = std.mem.split(u8, color_string, ",");
-    var color_count: usize = 0;
-    while (color_iter.next()) |_| {
-        color_count += 1;
-    }
-
-    var colors = try allocator.alloc(usize, color_count);
-
-    color_iter.reset();
-    var i: usize = 0;
-    while (color_iter.next()) |color_str| {
-        colors[i] = try std.fmt.parseInt(usize, color_str, 10);
-        i += 1;
-    }
-
-    return colors;
-}
-
 fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
-    var ascii_art = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
-    const color_scheme = try splitColors(allocator, &ascii_art);
+    const logo_info = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
+    const ascii_art = logo_info.ascii orelse return error.AsciiFetchFailed;
+    const color_scheme = try logo_info.colorsAsNums();
     const ascii_art_color = try colorize(allocator, ascii_art, color_scheme);
 
     const logo_width = getMaxWidth(ascii_art, allocator);
