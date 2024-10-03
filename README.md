@@ -25,12 +25,16 @@ ZFetch is a lighweight command-line system information tool written in Zig, with
 To build ZFetch from source, you'll need to have Zig installed on your system. Follow these steps:
 
 Clone the repository:
-```git clone https://github.com/williamhcarter/zfetch.git
+```
+git clone https://github.com/williamhcarter/zfetch.git
 cd zfetch
 ```
 
 Build the project:
-`zig build`
+
+```
+zig build
+```
 
 The compiled binary will be available in the zig-out/bin directory.
 
