@@ -34,8 +34,7 @@ const memory = @import("fetch/memory_macos.zig");
 const windows = std.os.windows;
 const regkey = @import("utils/regkey.zig");
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
-const ascii_colors = @import("utils/colors.zig");
-const Logo = @import("utils/colors.zig").LogoInfo;
+const Logo = @import("utils/logo.zig").LogoInfo;
 const logos = @import("logos");
 
 //================= Helper Functions =================
@@ -615,6 +614,14 @@ pub const Ascii = struct {
     content: []const u8,
 };
 
+pub fn getAsciiList() !std.ArrayList(Ascii) {
+    var logo_list = std.ArrayList(Ascii).init(std.heap.page_allocator);
+    inline for (logos.names) |name| {
+        try logo_list.append(Ascii{ .name = name, .content = @embedFile(name) });
+    }
+    return logo_list;
+}
+
 pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
     if (std.mem.eql(u8, image, "")) {
         const result: anyerror!Logo = switch (builtin.os.tag) {
@@ -630,7 +637,7 @@ pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
 }
 
 pub fn logoFetcher(filename: []const u8) !Logo {
-    const ascii_list: std.ArrayList(Ascii) = try getAscii();
+    const ascii_list: std.ArrayList(Ascii) = try getAsciiList();
     const logo = try getLogoInfo(filename);
     for (ascii_list.items) |ascii_item| {
         if (logo.matchNames(ascii_item.name)) {
@@ -640,36 +647,11 @@ pub fn logoFetcher(filename: []const u8) !Logo {
     return error.LogoNotFound;
 }
 
-pub fn getAscii() !std.ArrayList(Ascii) {
-    var logo_list = std.ArrayList(Ascii).init(std.heap.page_allocator);
-    inline for (logos.names) |name| {
-        try logo_list.append(Ascii{ .name = name, .content = @embedFile(name) });
-    }
-    return logo_list;
-}
-
 pub fn getLogoInfo(filename: []const u8) !Logo {
-    for (ascii_colors.logos) |logo| {
-        if (logo.matchNames(filename)) {
-            return logo;
-        }
+    for (info.logo_list) |logo| {
+        if (logo.matchNames(filename)) return logo;
     }
     return error.LogoNotFound;
-}
-
-fn getLogoColors(allocator: std.mem.Allocator, filename: []const u8) ![]const u8 {
-    const logo = try getLogoInfo(filename);
-
-    var logo_colors: []const u8 = "";
-    var color_strs = try allocator.alloc([]const u8, logo.colors.len);
-
-    for (logo.colors, 0..) |color, i| {
-        color_strs[i] = try std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(color)});
-    }
-
-    logo_colors = try std.fmt.allocPrint(allocator, "{s}\n", .{try std.mem.join(allocator, ",", color_strs)});
-
-    return logo_colors;
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) !Logo {

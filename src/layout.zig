@@ -9,7 +9,7 @@ const builtin = @import("builtin");
 const fetch = @import("fetch.zig");
 const buf = @import("utils/buffer.zig");
 const Timer = @import("utils/timer.zig").Timer;
-const Color = @import("utils/colors.zig").Color;
+const Color = @import("utils/logo.zig").Color;
 //============================== Data Structures ===============================
 const newline = switch (builtin.os.tag) {
     .windows => "\r\n",
