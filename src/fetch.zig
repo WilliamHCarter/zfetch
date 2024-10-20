@@ -609,19 +609,6 @@ fn windowsGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 //================= Fetch Logo =================
-pub const Ascii = struct {
-    name: []const u8,
-    content: []const u8,
-};
-
-pub fn getAsciiList() !std.ArrayList(Ascii) {
-    var logo_list = std.ArrayList(Ascii).init(std.heap.page_allocator);
-    inline for (logos.names) |name| {
-        try logo_list.append(Ascii{ .name = name, .content = @embedFile(name) });
-    }
-    return logo_list;
-}
-
 pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
     if (std.mem.eql(u8, image, "")) {
         const result: anyerror!Logo = switch (builtin.os.tag) {
@@ -637,21 +624,11 @@ pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
 }
 
 pub fn logoFetcher(filename: []const u8) !Logo {
-    const ascii_list: std.ArrayList(Ascii) = try getAsciiList();
-    const logo = try getLogoInfo(filename);
-    for (ascii_list.items) |ascii_item| {
-        if (logo.matchNames(ascii_item.name)) {
-            return logo.addAscii(ascii_item.content);
-        }
-    }
-    return error.LogoNotFound;
-}
-
-pub fn getLogoInfo(filename: []const u8) !Logo {
-    for (info.logo_list) |logo| {
-        if (logo.matchNames(filename)) return logo;
-    }
-    return error.LogoNotFound;
+    return Logo.getLogoFromList(filename) catch {
+        Logo.getLogoFromFile(filename) catch {
+            return error.LogoNotFound;
+        };
+    };
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) !Logo {
