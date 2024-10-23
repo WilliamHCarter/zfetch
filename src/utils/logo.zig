@@ -7,11 +7,11 @@ pub const Ascii = struct {
 };
 
 pub fn getAsciiList() !std.ArrayList(Ascii) {
-    var logo_list = std.ArrayList(Ascii).init(std.heap.page_allocator);
-    inline for (logos.names) |name| {
-        try logo_list.append(Ascii{ .name = name, .content = @embedFile(name) });
+    var logos = std.ArrayList(Ascii).init(std.heap.page_allocator);
+    inline for (logo_list.names) |name| {
+        try logos.append(Ascii{ .name = name, .content = @embedFile(name) });
     }
-    return logo_list;
+    return logos;
 }
 
 pub const LogoInfo = struct {
@@ -61,12 +61,12 @@ pub const LogoInfo = struct {
     }
 
     pub fn getLogoFromList(name: []const u8) !LogoInfo {
-        const logo: LogoInfo = undefined;
+        var logo: LogoInfo = undefined;
         for (logo_list) |lg| {
             if (lg.matchNames(name)) logo = lg;
         }
 
-        const ascii_list: std.ArrayList(Ascii) = try logo.getAsciiList();
+        const ascii_list: std.ArrayList(Ascii) = try getAsciiList();
         for (ascii_list.items) |ascii_item| {
             if (logo.matchNames(ascii_item.name)) {
                 return logo.addAscii(ascii_item.content);
@@ -78,15 +78,16 @@ pub const LogoInfo = struct {
     }
 
     pub fn getLogoFromFile(filename: []const u8) !LogoInfo {
-        const logo: LogoInfo = undefined;
+        var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+        const ascii = try std.fs.cwd().readFile(filename, &cwd_buf);
+
         for (logo_list) |lg| {
-            if (lg.matchNames(name)) logo = lg;
+            if (lg.matchNames(filename)) {
+                return lg.addAscii(ascii);
+            }
         }
 
-        var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const ascii: []const u8 = std.fs.cwd().readFile(filename, &cwd_buf) catch {
-            return error.LogoNotFound;
-        };
+        return error.LogoNotFound;
     }
 };
 
