@@ -1,5 +1,6 @@
 const std = @import("std");
 const logo_list = @import("../info.zig").logo_list;
+const logos = @import("logos");
 
 pub const Ascii = struct {
     name: []const u8,
@@ -7,11 +8,11 @@ pub const Ascii = struct {
 };
 
 pub fn getAsciiList() !std.ArrayList(Ascii) {
-    var logos = std.ArrayList(Ascii).init(std.heap.page_allocator);
-    inline for (logo_list.names) |name| {
-        try logos.append(Ascii{ .name = name, .content = @embedFile(name) });
+    var logo_lst = std.ArrayList(Ascii).init(std.heap.page_allocator);
+    inline for (logos.names) |name| {
+        try logo_lst.append(Ascii{ .name = name, .content = @embedFile(name) });
     }
-    return logos;
+    return logo_lst;
 }
 
 pub const LogoInfo = struct {
@@ -62,32 +63,64 @@ pub const LogoInfo = struct {
 
     pub fn getLogoFromList(name: []const u8) !LogoInfo {
         var logo: LogoInfo = undefined;
-        for (logo_list) |lg| {
-            if (lg.matchNames(name)) logo = lg;
-        }
+        var logo_found: bool = false;
 
+        for (logo_list) |lg| {
+            if (lg.matchNames(name)) {
+                logo = lg;
+                logo_found = true;
+            }
+        }
+        if (!logo_found) return error.LogoNotFound;
         const ascii_list: std.ArrayList(Ascii) = try getAsciiList();
         for (ascii_list.items) |ascii_item| {
             if (logo.matchNames(ascii_item.name)) {
                 return logo.addAscii(ascii_item.content);
             }
         }
-        getLogoFromFile(name) catch {
-            return error.LogoNotFound;
-        };
+        return error.LogoNotFound;
     }
 
     pub fn getLogoFromFile(filename: []const u8) !LogoInfo {
-        var cwd_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const ascii = try std.fs.cwd().readFile(filename, &cwd_buf);
+        var logo: LogoInfo = undefined;
 
-        for (logo_list) |lg| {
-            if (lg.matchNames(filename)) {
-                return lg.addAscii(ascii);
-            }
+        const file_contents: []const u8 = std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.fs.MAX_PATH_BYTES) catch {
+            return error.LogoFileNotFound;
+        };
+        defer std.heap.page_allocator.free(file_contents);
+
+        const start_marker = "<<<";
+        const end_marker = ">>>";
+
+        const start_idx = std.mem.indexOf(u8, file_contents, start_marker) orelse return error.InvalidFormat;
+        const end_idx = std.mem.indexOf(u8, file_contents, end_marker) orelse return error.InvalidFormat;
+
+        if (end_idx <= start_idx + start_marker.len) return error.InvalidFormat;
+
+        const metadata = std.mem.trim(u8, file_contents[start_idx + start_marker.len .. end_idx], &std.ascii.whitespace);
+        var names = std.ArrayList([]const u8).init(std.heap.page_allocator);
+        defer names.deinit();
+
+        var metadata_iter = std.mem.split(u8, metadata, ",");
+        while (metadata_iter.next()) |name| {
+            const trimmed_name = std.mem.trim(u8, name, &std.ascii.whitespace);
+            try names.append(trimmed_name);
         }
 
-        return error.LogoNotFound;
+        const newline_after_meta = std.mem.indexOf(u8, file_contents[end_idx + end_marker.len ..], "\n") orelse
+            return error.InvalidFormat;
+        const ascii_start = end_idx + end_marker.len + newline_after_meta + 1;
+        const ascii_content = file_contents[ascii_start..];
+
+        logo = LogoInfo{
+            .names = try names.toOwnedSlice(),
+            .colors = &[_]Color{},
+            .color_primary = null,
+            .color_secondary = null,
+            .ascii = ascii_content,
+        };
+
+        return logo;
     }
 };
 
