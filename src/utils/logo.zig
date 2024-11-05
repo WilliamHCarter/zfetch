@@ -82,39 +82,22 @@ pub const LogoInfo = struct {
     }
 
     pub fn getLogoFromFile(filename: []const u8) !LogoInfo {
-        var logo: LogoInfo = undefined;
+        var buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+        const cwd = try std.fs.cwd().realpath(".", &buf);
 
-        const file_contents: []const u8 = std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.fs.MAX_PATH_BYTES) catch {
-            return error.LogoFileNotFound;
-        };
-        defer std.heap.page_allocator.free(file_contents);
+        const full_path = try std.fs.path.join(std.heap.page_allocator, &[_][]const u8{ cwd, filename });
+        defer std.heap.page_allocator.free(full_path);
 
-        const start_marker = "<<<";
-        const end_marker = ">>>";
-
-        const start_idx = std.mem.indexOf(u8, file_contents, start_marker) orelse return error.InvalidFormat;
-        const end_idx = std.mem.indexOf(u8, file_contents, end_marker) orelse return error.InvalidFormat;
-
-        if (end_idx <= start_idx + start_marker.len) return error.InvalidFormat;
-
-        const metadata = std.mem.trim(u8, file_contents[start_idx + start_marker.len .. end_idx], &std.ascii.whitespace);
-        var names = std.ArrayList([]const u8).init(std.heap.page_allocator);
-        defer names.deinit();
-
-        var metadata_iter = std.mem.split(u8, metadata, ",");
-        while (metadata_iter.next()) |name| {
-            const trimmed_name = std.mem.trim(u8, name, &std.ascii.whitespace);
-            try names.append(trimmed_name);
-        }
-
-        const newline_after_meta = std.mem.indexOf(u8, file_contents[end_idx + end_marker.len ..], "\n") orelse
-            return error.InvalidFormat;
-        const ascii_start = end_idx + end_marker.len + newline_after_meta + 1;
+        const file_contents: []u8 = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, full_path, 40960);
+        // defer std.heap.page_allocator.free(file_contents);
+        std.debug.print("content: {s}\n", .{file_contents});
+        const color_line: []Color = getCustomColorLine(file_contents) catch &[_]Color{};
+        const ascii_start = file_contents[std.mem.indexOf(u8, file_contents, "\n") orelse 0];
         const ascii_content = file_contents[ascii_start..];
 
-        logo = LogoInfo{
-            .names = try names.toOwnedSlice(),
-            .colors = &[_]Color{},
+        const logo = LogoInfo{
+            .names = &[0][]u8{},
+            .colors = color_line,
             .color_primary = null,
             .color_secondary = null,
             .ascii = ascii_content,
@@ -123,6 +106,29 @@ pub const LogoInfo = struct {
         return logo;
     }
 };
+
+pub fn getCustomColorLine(file_contents: []const u8) ![]Color {
+    const start_marker = "<<<";
+    const end_marker = ">>>";
+
+    const start_idx = std.mem.indexOf(u8, file_contents, start_marker) orelse return error.InvalidFormat;
+    const end_idx = std.mem.indexOf(u8, file_contents, end_marker) orelse return error.InvalidFormat;
+
+    if (end_idx <= start_idx + start_marker.len) return error.InvalidFormat;
+
+    const metadata = std.mem.trim(u8, file_contents[start_idx + start_marker.len .. end_idx], &std.ascii.whitespace);
+    var colors = std.ArrayList(Color).init(std.heap.page_allocator);
+    defer colors.deinit();
+
+    var metadata_iter = std.mem.split(u8, metadata, ",");
+    while (metadata_iter.next()) |color| {
+        const trimmed_color = std.mem.trim(u8, color, &std.ascii.whitespace);
+        std.debug.print("Color Line: {s}", .{trimmed_color});
+        const converted_color: Color = std.meta.stringToEnum(Color, trimmed_color) orelse return error.InvalidColor;
+        try colors.append(converted_color);
+    }
+    return colors.toOwnedSlice();
+}
 
 pub const Color = enum(usize) {
     reset = 0,
