@@ -514,11 +514,40 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
     var result = std.ArrayList(u8).init(allocator);
     errdefer result.deinit();
     var color_found: bool = false;
-
     var current_color: ?usize = null;
     var i: usize = 0;
 
     while (i < ascii_art.len) {
+        const remaining_space: usize = ascii_art.len - i;
+        //if we have a $, check for color codes and replace
+        if (ascii_art[i] == '$' and remaining_space > 1) {
+            color_found = true;
+            const color_index = ascii_art[i + 1] - '0';
+            if (color_index < 0 or color_index >= 16) {
+                break;
+            }
+
+            try result.appendSlice(try intToANSI(allocator, color_index, color_scheme));
+            current_color = color_index;
+            i += 2;
+            continue;
+        }
+
+        //same check for curly brace variant
+        if (ascii_art[i] == '$' and remaining_space > 4) {
+            color_found = true;
+            if (ascii_art[i + 1] == '{' and i + 4 < ascii_art.len and ascii_art[i + 4] == '}') {
+                const color_index = ascii_art[i + 3] - '0';
+                if (color_index < 0 or color_index >= 16) {
+                    break;
+                }
+
+                try result.appendSlice(try intToANSI(allocator, color_index, color_scheme));
+                current_color = color_index;
+                i += 5;
+                continue;
+            }
+        }
         if (ascii_art[i] == '\n') {
             try result.append('\n');
             if (current_color) |color| {
@@ -527,35 +556,6 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
             i += 1;
             continue;
         }
-
-        if (ascii_art[i] == '$' and i + 1 < ascii_art.len) {
-            var new_color: ?usize = null;
-            var skip: usize = 0;
-            color_found = true;
-            if (ascii_art[i + 1] == '{' and i + 4 < ascii_art.len and ascii_art[i + 4] == '}') {
-                // Handle ${c3} format
-                const color_index = ascii_art[i + 3] - '0';
-                if (color_index >= 0 and color_index < 16) {
-                    new_color = color_index;
-                    skip = 5;
-                }
-            } else if (ascii_art[i + 1] >= '0' and ascii_art[i + 1] <= '9') {
-                // Handle $3 format
-                const color_index = ascii_art[i + 1] - '0';
-                if (color_index >= 0 and color_index < 16) {
-                    new_color = color_index;
-                    skip = 2;
-                }
-            }
-
-            if (new_color) |color| {
-                try result.appendSlice(try intToANSI(allocator, color, color_scheme));
-                current_color = color;
-                i += skip;
-                continue;
-            }
-        }
-
         try result.append(ascii_art[i]);
         i += 1;
     }
@@ -574,8 +574,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
     const logo_info = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
     const ascii_art = logo_info.ascii orelse return error.AsciiFetchFailed;
     const color_scheme = try logo_info.colorsAsNums();
-    const ascii_art_color = try colorize(allocator, ascii_art, color_scheme);
-
+    const ascii_art_color = colorize(allocator, ascii_art, color_scheme) catch ascii_art;
     const logo_width = getMaxWidth(ascii_art, allocator);
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);

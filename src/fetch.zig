@@ -625,9 +625,7 @@ pub fn getLogo(allocator: std.mem.Allocator, image: []const u8) !Logo {
 
 pub fn logoFetcher(filename: []const u8) !Logo {
     return Logo.getLogoFromList(filename) catch {
-        Logo.getLogoFromFile(filename) catch {
-            return error.LogoNotFound;
-        };
+        return Logo.getLogoFromFile(filename);
     };
 }
 
