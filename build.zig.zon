@@ -1,0 +1,15 @@
+.{
+    .name = "zfetch",
+    .version = "0.1.0",
+    .description = "A command-line system information tool written in Zig",
+    .minimum_zig_version = "0.13.0",
+    .paths = .{
+        "src",
+        "themes", // Theme files that get embedded
+        "ascii", // Logo files that get embedded
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE.md",
+        "README.md",
+    },
+}
