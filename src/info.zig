@@ -35,6 +35,8 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
         .{ "11", "Big Sur" },
         .{ "12", "Monterey" },
         .{ "13", "Ventura" },
+        .{ "14", "Sonoma" },
+        .{ "15", "Sequoia" },
     };
 
     const parsed_version = std.fmt.parseFloat(f32, version) catch return VersionError.InvalidVersion;
@@ -168,7 +170,15 @@ pub const products = .{
     .{ "iMac10,1", "iMac (27/21.5-inch, Late 2009)" },
     .{ "iMac9,1", "iMac (24/20-inch, Early 2009)" },
 
-    // Newer models (2023-2024)
+    // Newer models (2023-2025)
+    .{ "Mac16,12", "MacBook Air (13-inch, M4, 2025)" },
+    .{ "Mac16,13", "MacBook Air (15-inch, M4, 2025)" },
+    .{ "Mac15,16", "MacBook Pro (14-inch, 2025)" },
+    .{ "Mac15,17", "MacBook Pro (16-inch, 2025)" },
+    .{ "Mac15,18", "iMac (24-inch, 2025)" },
+    .{ "Mac15,19", "Mac Studio (M3 Ultra, 2025)" },
+    .{ "Mac15,20", "Mac Pro (2025)" },
+    .{ "Mac15,21", "Mac mini (M3, 2025)" },
     .{ "Mac15,13", "MacBook Air (15-inch, M3, 2024)" },
     .{ "Mac15,2", "MacBook Air (13-inch, M3, 2024)" },
     .{ "Mac15,3", "MacBook Pro (14-inch, Nov 2023, Two Thunderbolt / USB 4 ports)" },
