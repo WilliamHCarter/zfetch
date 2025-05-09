@@ -38,13 +38,29 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
         .{ "14", "Sonoma" },
         .{ "15", "Sequoia" },
     };
+    // Function to compare version strings with multiple periods
+    const parseVersion = fn (version: []const u8) []u8 {
+        var parts = std.mem.split(u8, version, ".");
+        var result: []u8 = undefined;
+        var idx: usize = 0;
 
-    const parsed_version = std.fmt.parseFloat(f32, version) catch return VersionError.InvalidVersion;
+        while (parts.next()) |part| {
+            const part_as_int = try std.fmt.parseInt(i32, part, 10);
+            result[idx] = part_as_int;
+            idx += 1;
+        }
+
+        return result;
+    };
+
+    // Parse the input version into an integer list
+    const parsed_version = parseVersion(version);
     var previous_name: []const u8 = "";
 
+    // Loop over version ranges and compare
     for (version_ranges) |range| {
-        const range_version = std.fmt.parseFloat(f32, range[0]) catch return VersionError.InvalidVersion;
-        if (parsed_version >= range_version) {
+        const range_version = parseVersion(range[0]);
+        if (compareVersion(parsed_version, range_version)) {
             previous_name = range[1];
         } else {
             break;
@@ -58,6 +74,15 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
     return previous_name;
 }
 
+// Compare two versions by comparing each part of the version
+fn compareVersion(parsed: []u8, range: []u8) bool {
+    const len = std.math.min(parsed.len, range.len);
+    for (i in 0..len) {
+        if (parsed[i] > range[i]) return true;
+        if (parsed[i] < range[i]) return false;
+    }
+    return parsed.len >= range.len; // In case of equal parts, the shorter version is "smaller"
+};
 pub const products = .{
     // MacBook Pro
     .{ "MacBookPro18,3", "MacBook Pro (14-inch, 2021)" },
