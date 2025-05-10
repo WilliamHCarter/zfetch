@@ -38,51 +38,42 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
         .{ "14", "Sonoma" },
         .{ "15", "Sequoia" },
     };
-    // Function to compare version strings with multiple periods
-    const parseVersion = fn (version: []const u8) []u8 {
-        var parts = std.mem.split(u8, version, ".");
-        var result: []u8 = undefined;
-        var idx: usize = 0;
+    var version_name: []const u8 = "";
 
-        while (parts.next()) |part| {
-            const part_as_int = try std.fmt.parseInt(i32, part, 10);
-            result[idx] = part_as_int;
-            idx += 1;
-        }
+    // Parse major and minor versions
+    var version_itr = std.mem.split(u8, version, ".");
+    const major_str = version_itr.next() orelse return VersionError.InvalidVersion;
+    const major = try std.fmt.parseInt(u32, major_str, 10);
 
-        return result;
-    };
+    // Default minor to 0 if not provided
+    const minor_str = version_itr.next() orelse "0";
+    const minor = try std.fmt.parseInt(u32, minor_str, 10);
 
-    // Parse the input version into an integer list
-    const parsed_version = parseVersion(version);
-    var previous_name: []const u8 = "";
-
-    // Loop over version ranges and compare
+    // Find the matching version name by comparing each range
     for (version_ranges) |range| {
-        const range_version = parseVersion(range[0]);
-        if (compareVersion(parsed_version, range_version)) {
-            previous_name = range[1];
-        } else {
+        var range_itr = std.mem.split(u8, range[0], ".");
+        const range_major_str = range_itr.next() orelse continue;
+        const range_major = std.fmt.parseInt(u32, range_major_str, 10) catch continue;
+
+        const range_minor_str = range_itr.next() orelse "0";
+        const range_minor = std.fmt.parseInt(u32, range_minor_str, 10) catch 0;
+
+        // If the input version is less than the current range, we've gone too far
+        if (major < range_major or (major == range_major and minor < range_minor)) {
             break;
         }
+
+        // Otherwise, this range is a potential match
+        version_name = range[1];
     }
 
-    if (previous_name.len == 0) {
+    if (version_name.len == 0) {
         return VersionError.UnknownVersion;
     }
 
-    return previous_name;
+    return version_name;
 }
 
-// Compare two versions by comparing each part of the version
-fn compareVersion(parsed: []u8, range: []u8) bool {
-    const len = std.math.min(parsed.len, range.len);
-    for (i in 0..len) {
-        if (parsed[i] > range[i]) return true;
-        if (parsed[i] < range[i]) return false;
-    }
-    return parsed.len >= range.len; // In case of equal parts, the shorter version is "smaller"
-};
 pub const products = .{
     // MacBook Pro
     .{ "MacBookPro18,3", "MacBook Pro (14-inch, 2021)" },
