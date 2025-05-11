@@ -26,20 +26,18 @@ pub fn parseOS(allocator: std.mem.Allocator) !OSResult {
     var found_count: usize = 0;
     var lines = std.mem.split(u8, file_contents, "\n");
     while (lines.next()) |line| {
-        if (std.mem.indexOf(u8, line, "<key>")) |key_start| {
-            const key = line[key_start + 5 .. line.len - 6];
-            if (lines.next()) |value_line| {
-                if (std.mem.indexOf(u8, value_line, "<string>")) |value_start| {
-                    const value = value_line[value_start + 8 .. value_line.len - 9];
-                    for (key_values) |kv| {
-                        if (std.mem.eql(u8, key, kv.key)) {
-                            kv.value.* = try allocator.dupe(u8, value);
-                            found_count += 1;
-                            break;
-                        }
-                    }
-                    if (found_count == key_values.len) break;
-                }
+        const key_start = std.mem.indexOf(u8, line, "<key>") orelse continue;
+        const key = line[key_start + 5 .. line.len - 6];
+
+        const value_line = lines.next() orelse continue;
+        const value_start = std.mem.indexOf(u8, value_line, "<string>") orelse continue;
+        const value = value_line[value_start + 8 .. value_line.len - 9];
+
+        for (key_values) |kv| {
+            if (std.mem.eql(u8, key, kv.key)) {
+                kv.value.* = try allocator.dupe(u8, value);
+                found_count += 1;
+                break;
             }
         }
     }
