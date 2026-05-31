@@ -218,7 +218,7 @@ fn lock(mutex: *std.atomic.Mutex) void {
 }
 
 fn getDistroColors(allocator: std.mem.Allocator, theme: Theme) !Colors {
-    var image: []const u8 = undefined;
+    var image: []const u8 = "";
 
     for (theme.components.items) |component| {
         if (component.kind == ComponentKind.Logo) {
@@ -303,7 +303,13 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     try buffer.render(&stdout_writer.interface);
     try stdout_writer.interface.flush();
     try timer.endLap("render", start_time);
-    // try timer.printResults(stdout);
+
+    if (std.c.getenv("ZFETCH_BENCH") != null) {
+        var stderr_buffer: [4096]u8 = undefined;
+        var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
+        try timer.printResults(&stderr_writer.interface);
+        try stderr_writer.interface.flush();
+    }
 }
 
 fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
