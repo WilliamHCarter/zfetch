@@ -25,7 +25,7 @@ fn getThemeFromCommand(allocator: std.mem.Allocator, command: []const []const u8
 
 pub fn getLinuxTheme(allocator: std.mem.Allocator) ![]const u8 {
     const de_info = try getLinuxDE(allocator);
-    var de_iter = std.mem.split(u8, de_info, " ");
+    var de_iter = std.mem.splitSequence(u8, de_info, " ");
     const de_name = de_iter.next() orelse return "Unknown";
 
     for (de_theme_commands) |de_command| {

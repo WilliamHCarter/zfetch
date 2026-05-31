@@ -7,7 +7,7 @@ pub fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
     const xdg_current_desktop = try process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
 
     if (xdg_current_desktop.len > 0) {
-        var desktops = std.mem.split(u8, xdg_current_desktop, ":");
+        var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
         _ = desktops.next(); // Skip the first entry (distro)
 
         const name = try allocator.dupe(u8, desktops.next() orelse "");

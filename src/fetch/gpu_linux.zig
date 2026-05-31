@@ -44,7 +44,7 @@ fn getGPUInfoFromLspci(allocator: std.mem.Allocator) ![]const u8 {
     var gpu_list = std.ArrayList([]const u8).init(allocator);
     defer gpu_list.deinit();
 
-    var lines = std.mem.split(u8, result, "\n");
+    var lines = std.mem.splitSequence(u8, result, "\n");
     while (lines.next()) |line| {
         if (isGPULine(line)) {
             const gpu_info = try extractGPUInfo(allocator, line);
@@ -72,7 +72,7 @@ fn isGPULine(line: []const u8) bool {
 }
 
 fn extractGPUInfo(allocator: std.mem.Allocator, line: []const u8) ![]const u8 {
-    var fields = std.mem.split(u8, line, "\"");
+    var fields = std.mem.splitSequence(u8, line, "\"");
     var field_index: usize = 0;
     var device_name: ?[]const u8 = null;
     var subsystem_name: ?[]const u8 = null;

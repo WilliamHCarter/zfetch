@@ -69,12 +69,12 @@ fn getX11WM(allocator: mem.Allocator) ![]const u8 {
 fn getX11WMUsingXprop(allocator: mem.Allocator) ![]const u8 {
     const xprop_output = try execCommand(allocator, &[_][]const u8{ "xprop", "-root", "-notype", "_NET_SUPPORTING_WM_CHECK" }, "");
 
-    var window_id_iter = std.mem.split(u8, xprop_output, "# ");
+    var window_id_iter = std.mem.splitSequence(u8, xprop_output, "# ");
     const window_id = window_id_iter.next().?;
 
     const wm_name_output = try execCommand(allocator, &[_][]const u8{ "xprop", "-id", window_id, "-notype", "-len", "100", "-f", "_NET_WM_NAME", "8t" }, "");
 
-    var wm_name_iter = std.mem.split(u8, wm_name_output, "= ");
+    var wm_name_iter = std.mem.splitSequence(u8, wm_name_output, "= ");
     var wm_name = wm_name_iter.next().?;
 
     wm_name = std.mem.trim(u8, wm_name, "\"");

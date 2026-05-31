@@ -24,7 +24,7 @@ pub fn parseOS(allocator: std.mem.Allocator) !OSResult {
     };
 
     var found_count: usize = 0;
-    var lines = std.mem.split(u8, file_contents, "\n");
+    var lines = std.mem.splitSequence(u8, file_contents, "\n");
     while (lines.next()) |line| {
         const key_start = std.mem.indexOf(u8, line, "<key>") orelse continue;
         const key = line[key_start + 5 .. line.len - 6];

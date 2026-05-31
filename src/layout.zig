@@ -125,7 +125,7 @@ pub fn loadTheme(file: []const u8) !Theme {
 
 fn parseTheme(content: []const u8) !Theme {
     var theme = Theme.init("parsed_theme");
-    var lines = std.mem.split(u8, content, newline);
+    var lines = std.mem.splitSequence(u8, content, newline);
 
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t");
@@ -140,14 +140,14 @@ fn parseTheme(content: []const u8) !Theme {
 }
 
 pub fn parseComponent(component_str: []const u8) !Component {
-    var parts = std.mem.split(u8, component_str, " ");
+    var parts = std.mem.splitSequence(u8, component_str, " ");
     const kind_str = parts.next() orelse return error.InvalidComponent;
     const kind = std.meta.stringToEnum(ComponentKind, kind_str) orelse return error.UnknownComponentKind;
 
     var component = Component.init(kind);
 
     while (parts.next()) |part| {
-        var kv = std.mem.split(u8, part, "=");
+        var kv = std.mem.splitSequence(u8, part, "=");
         const key = kv.next() orelse continue;
         const value = kv.next() orelse continue;
         try component.properties.put(key, value);
@@ -410,7 +410,7 @@ fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
         return memory;
     }
 
-    var it = std.mem.split(u8, memory, " / ");
+    var it = std.mem.splitSequence(u8, memory, " / ");
     const mem_used = it.next() orelse unreachable;
     const mem_total = it.next() orelse unreachable;
     const unit = component.properties.get("unit") orelse "Auto";
@@ -438,7 +438,7 @@ fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
 
 fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const colors = try fetch.getColors(allocator);
-    var color_lines = std.mem.split(u8, colors, "\n");
+    var color_lines = std.mem.splitSequence(u8, colors, "\n");
     const first_line = color_lines.next() orelse return error.InvalidColorFile;
     const second_line = color_lines.next() orelse return error.InvalidColorFile;
     const third_line = color_lines.next() orelse return error.InvalidColorFile;
@@ -449,7 +449,7 @@ fn renderColors(buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
 
 //❯
 fn renderTopBar(allocator: std.mem.Allocator, buffer: *buf.Buffer) !void {
-    const username = std.mem.trimRight(u8, try fetch.getUsername(allocator), " ");
+    const username = std.mem.trimEnd(u8, try fetch.getUsername(allocator), " ");
     const top_bar = try allocator.alloc(u8, username.len);
 
     const bar_symbol = "-";
@@ -485,7 +485,7 @@ fn getLineWidths(ascii_art: []const u8, allocator: std.mem.Allocator) ![]usize {
     var widths = std.ArrayList(usize).init(allocator);
     errdefer widths.deinit();
 
-    var lines = std.mem.split(u8, ascii_art, "\n");
+    var lines = std.mem.splitSequence(u8, ascii_art, "\n");
     while (lines.next()) |line| {
         const result = processLine(line, allocator, undefined) catch line;
         const visual_length: usize = result.len;
@@ -578,7 +578,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
     const logo_width = getMaxWidth(ascii_art, allocator);
     const line_widths = try getLineWidths(ascii_art_color, allocator);
     const visual_line_widths = try getLineWidths(ascii_art, allocator);
-    var ascii_lines = std.mem.split(u8, ascii_art_color, newline);
+    var ascii_lines = std.mem.splitSequence(u8, ascii_art_color, newline);
     const padding = 3;
     const position = logo.properties.get("position") orelse "Inline";
 
@@ -618,13 +618,13 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
         .Right => {
             var row_max: usize = 0;
             for (buffer.lines.items) |item| {
-                const visual_line = std.mem.trimRight(u8, try allocator.dupe(u8, item), " ");
+                const visual_line = std.mem.trimEnd(u8, try allocator.dupe(u8, item), " ");
                 row_max = @max(row_max, try buffer.stripTerminalCodes(visual_line));
             }
             buffer.current_row = 0;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
-                const visual_line = std.mem.trimRight(u8, try allocator.dupe(u8, buffer.lines.items[row]), " ");
+                const visual_line = std.mem.trimEnd(u8, try allocator.dupe(u8, buffer.lines.items[row]), " ");
                 const stripped_line = try buffer.stripTerminalCodes(visual_line);
                 try buffer.write(row, row_max + (visual_line.len - stripped_line) + padding, line_itr);
                 if (row >= buffer.getCurrentRow()) {
@@ -634,4 +634,39 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
             }
         },
     }
+}
+
+//================================== Tests =====================================
+test "parseComponent parses kind and key/value properties" {
+    var component = try parseComponent("Logo image=linux position=Left");
+    defer component.deinit();
+
+    try std.testing.expectEqual(ComponentKind.Logo, component.kind);
+    try std.testing.expectEqualStrings("linux", component.properties.get("image").?);
+    try std.testing.expectEqualStrings("Left", component.properties.get("position").?);
+}
+
+test "parseComponent rejects unknown component kinds" {
+    try std.testing.expectError(error.UnknownComponentKind, parseComponent("NotAComponent"));
+}
+
+test "loadTheme parses component order" {
+    const allocator = std.testing.allocator;
+    const content = try std.mem.concat(allocator, u8, &.{
+        "<Username>",                       newline,
+        "<TopBar>",                         newline,
+        "<OS>",                             newline,
+        "<Logo image=linux position=Left>", newline,
+    });
+    defer allocator.free(content);
+
+    var theme = try loadTheme(content);
+    defer theme.deinit();
+
+    try std.testing.expectEqual(@as(usize, 4), theme.components.items.len);
+    try std.testing.expectEqual(ComponentKind.Username, theme.components.items[0].kind);
+    try std.testing.expectEqual(ComponentKind.TopBar, theme.components.items[1].kind);
+    try std.testing.expectEqual(ComponentKind.OS, theme.components.items[2].kind);
+    try std.testing.expectEqual(ComponentKind.Logo, theme.components.items[3].kind);
+    try std.testing.expectEqualStrings("linux", theme.components.items[3].properties.get("image").?);
 }

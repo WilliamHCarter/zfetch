@@ -9,31 +9,78 @@ const builtin = @import("builtin");
 const info = @import("info.zig");
 const cpu_linux = @import("fetch/cpu_linux.zig");
 const packages_macos = @import("fetch/packages_macos.zig");
-const packages_windows = @import("fetch/packages_windows.zig");
+const packages_windows = if (builtin.os.tag == .windows) @import("fetch/packages_windows.zig") else struct {
+    pub fn getWindowsPackages(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const packages_linux = @import("fetch/packages_linux.zig");
-const host_macos = @import("fetch/host_macos.zig");
+const host_macos = if (builtin.os.tag == .macos) @import("fetch/host_macos.zig") else struct {
+    pub fn getHost(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+    pub fn sysctlGetString(_: std.mem.Allocator, _: [:0]const u8) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const host_linux = @import("fetch/host_linux.zig");
 const terminal_windows = @import("fetch/terminal_windows.zig");
 const terminal_linux = @import("fetch/terminal_linux.zig");
-const resolution_macos = @import("fetch/resolution_macos.zig");
-const resolution_windows = @import("fetch/resolution_windows.zig");
+const resolution_macos = if (builtin.os.tag == .macos) @import("fetch/resolution_macos.zig") else struct {
+    pub fn getResolution(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
+const resolution_windows = if (builtin.os.tag == .windows) @import("fetch/resolution_windows.zig") else struct {
+    pub fn windowsResolution(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const resolution_linux = @import("fetch/resolution_linux.zig");
 const de_linux = @import("fetch/de_linux.zig");
-const gpu_macos = @import("fetch/gpu_macos.zig");
-const gpu_windows = @import("fetch/gpu_windows.zig");
+const gpu_macos = if (builtin.os.tag == .macos) @import("fetch/gpu_macos.zig") else struct {
+    pub fn getMacosGPU(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
+const gpu_windows = if (builtin.os.tag == .windows) @import("fetch/gpu_windows.zig") else struct {
+    pub fn getWindowsGPU(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const gpu_linux = @import("fetch/gpu_linux.zig");
-const wm_macos = @import("fetch/wm_macos.zig");
-const wm_windows = @import("fetch/wm_windows.zig");
+const wm_macos = if (builtin.os.tag == .macos) @import("fetch/wm_macos.zig") else struct {
+    pub fn getMacosWM(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
+const wm_windows = if (builtin.os.tag == .windows) @import("fetch/wm_windows.zig") else struct {
+    pub fn getWindowsWM(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const wm_linux = @import("fetch/wm_linux.zig");
-const theme_windows = @import("fetch/theme_windows.zig");
+const theme_windows = if (builtin.os.tag == .windows) @import("fetch/theme_windows.zig") else struct {
+    pub fn getWindowsTheme(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const theme_linux = @import("fetch/theme_linux.zig");
 const os_macos = @import("fetch/os_macos.zig");
-const os_windows = @import("fetch/os_windows.zig");
+const os_windows = if (builtin.os.tag == .windows) @import("fetch/os_windows.zig") else struct {
+    pub fn getWindowsOS(_: std.mem.Allocator) ![]const u8 {
+        return error.UnsupportedOS;
+    }
+};
 const os_linux = @import("fetch/os_linux.zig");
-const memory = @import("fetch/memory_macos.zig");
+const memory = if (builtin.os.tag == .macos) @import("fetch/memory_macos.zig") else struct {
+    pub fn getMachMemoryStats() !u64 {
+        return error.UnsupportedOS;
+    }
+};
 const windows = std.os.windows;
-const regkey = @import("utils/regkey.zig");
-const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin;
+const regkey = if (builtin.os.tag == .windows) @import("utils/regkey.zig") else struct {};
+const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin else struct {};
 const Logo = @import("utils/logo.zig").LogoInfo;
 const logos = @import("logos");
 
@@ -212,7 +259,7 @@ fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
     var memTotal: u64 = 0;
     var memAvailable: u64 = 0;
 
-    var lines = std.mem.split(u8, content, "\n");
+    var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "MemTotal:") or std.mem.startsWith(u8, line, "MemAvailable:")) {
             var it = std.mem.tokenize(u8, line, " \t");
@@ -290,7 +337,7 @@ fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
 
 fn getBootTime(allocator: std.mem.Allocator) !i64 {
     const output = try execCommand(allocator, &[_][]const u8{ "sysctl", "-n", "kern.boottime" }, "Unknown");
-    var iter = std.mem.split(u8, output, "=");
+    var iter = std.mem.splitSequence(u8, output, "=");
     _ = iter.next();
     const boot_time_str = iter.next() orelse return error.BootTimeNotFound;
 
@@ -308,7 +355,7 @@ fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
     const bytes_read = try file.read(&buffer);
     const content = buffer[0..bytes_read];
 
-    var iter = std.mem.split(u8, content, " ");
+    var iter = std.mem.splitSequence(u8, content, " ");
     const uptime_str = iter.next() orelse return error.InvalidUptimeFormat;
     const uptime_seconds_f64 = try std.fmt.parseFloat(f64, uptime_str);
     const uptime_seconds: u64 = @intFromFloat(uptime_seconds_f64);
@@ -382,7 +429,7 @@ fn shellTrim(shell: ShellType, version: []const u8) ![]const u8 {
         }
     } else if (std.mem.eql(u8, shell.trim, "ksh")) {
         var trimmed = std.mem.trim(u8, version, " KSH");
-        trimmed = std.mem.trimLeft(u8, trimmed, "version ");
+        trimmed = std.mem.trimStart(u8, trimmed, "version ");
         return trimmed;
     }
     return version;
@@ -633,7 +680,7 @@ fn linuxLogo(allocator: std.mem.Allocator) !Logo {
     const xdg_current_desktop = try std.process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
     var distro = try allocator.dupe(u8, "linux");
     if (xdg_current_desktop.len > 0) {
-        var desktops = std.mem.split(u8, xdg_current_desktop, ":");
+        var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
         if (desktops.next()) |desktop| {
             distro = try allocator.dupe(u8, desktop);
         }

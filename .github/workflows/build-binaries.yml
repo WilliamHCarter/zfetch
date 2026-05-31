@@ -1,4 +1,4 @@
-name: Cross-Platform Build
+name: Cross-Platform Release Build
 
 on:
   release:
@@ -7,62 +7,54 @@ on:
 
 jobs:
   build:
+    name: release / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Zig
-      uses: goto-bus-stop/setup-zig@v2
-      with:
-        version: 0.13.0
-    
-    - name: Build
-      run: zig build
-      continue-on-error: true
-      id: build
-    
-    - name: Run tests
-      run: zig build test
-      continue-on-error: true
-      id: test
+      - uses: actions/checkout@v4
 
-    - name: Create artifact
-      uses: actions/upload-artifact@v4
-      if: steps.build.outcome == 'success'
-      with:
-        name: ${{ matrix.os }}-build
-        path: zig-out/bin/y
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.1
 
-    - name: Report Status
-      if: always()
-      env:
-        BUILD_STATUS: ${{ steps.build.outcome }}
-        TEST_STATUS: ${{ steps.test.outcome }}
-      run: |
-        echo "Build status for ${{ matrix.os }}: $BUILD_STATUS"
-        echo "Test status for ${{ matrix.os }}: $TEST_STATUS"
-        if [ "$BUILD_STATUS" != "success" ] || [ "$TEST_STATUS" != "success" ]; then
-          echo "::error::Build or test failed on ${{ matrix.os }}"
-          exit 1
-        fi
+      - name: Zig version
+        run: zig version
 
-  summary:
-    needs: build
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-    - name: Summarize Build Results
-      run: |
-        echo "Build Summary:"
-        echo "Ubuntu: ${{ needs.build.result }}"
-        echo "macOS: ${{ needs.build.result }}"
-        echo "Windows: ${{ needs.build.result }}"
-        if [ "${{ needs.build.result }}" != "success" ]; then
-          echo "::error::One or more builds failed. Check individual jobs for details."
-          exit 1
-        fi
+      - name: Format check
+        shell: bash
+        run: zig fmt --check $(git ls-files '*.zig')
+
+      - name: Test
+        run: zig build test --summary all
+
+      - name: Build ReleaseSafe
+        run: zig build -Doptimize=ReleaseSafe --summary all
+
+      - name: Smoke help
+        run: zig build smoke -Doptimize=ReleaseSafe --summary all
+
+      - name: Checksum
+        shell: bash
+        run: |
+          BIN="zig-out/bin/zfetch"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then BIN="zig-out/bin/zfetch.exe"; fi
+          if command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$BIN" > zfetch-${{ matrix.os }}.sha256
+          else
+            sha256sum "$BIN" > zfetch-${{ matrix.os }}.sha256
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zfetch-${{ matrix.os }}
+          path: |
+            zig-out/bin/zfetch
+            zig-out/bin/zfetch.exe
+            zfetch-${{ matrix.os }}.sha256
+          if-no-files-found: error

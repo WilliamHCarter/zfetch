@@ -120,10 +120,9 @@ pub fn getCustomColorLine(file_contents: []const u8) ![]Color {
     var colors = std.ArrayList(Color).init(std.heap.page_allocator);
     defer colors.deinit();
 
-    var metadata_iter = std.mem.split(u8, metadata, ",");
+    var metadata_iter = std.mem.splitSequence(u8, metadata, ",");
     while (metadata_iter.next()) |color| {
         const trimmed_color = std.mem.trim(u8, color, &std.ascii.whitespace);
-        std.debug.print("Color Line: {s}", .{trimmed_color});
         const converted_color: Color = std.meta.stringToEnum(Color, trimmed_color) orelse return error.InvalidColor;
         try colors.append(converted_color);
     }
@@ -175,3 +174,22 @@ pub const Color = enum(usize) {
     bg_light_cyan = 106,
     bg_light_white = 107,
 };
+
+//================================== Tests =====================================
+test "embedded logo list exposes known platform logos" {
+    const arch = try LogoInfo.getLogoFromList("arch");
+    try std.testing.expect(arch.ascii != null);
+
+    const macos = try LogoInfo.getLogoFromList("macos");
+    try std.testing.expect(macos.ascii != null);
+
+    const windows = try LogoInfo.getLogoFromList("windows");
+    try std.testing.expect(windows.ascii != null);
+}
+
+test "custom logo color metadata is parsed" {
+    const colors = try getCustomColorLine("<<<fg_red, fg_blue>>>\nASCII");
+    try std.testing.expectEqual(@as(usize, 2), colors.len);
+    try std.testing.expectEqual(Color.fg_red, colors[0]);
+    try std.testing.expectEqual(Color.fg_blue, colors[1]);
+}

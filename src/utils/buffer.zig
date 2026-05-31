@@ -82,7 +82,7 @@ pub const Buffer = struct {
         const formatted_label = try std.fmt.allocPrint(self.allocator, "{s}{s}:\x1b[0m ", .{ color, label });
         defer self.allocator.free(formatted_label);
 
-        const trimmed_data = std.mem.trimRight(u8, data, " ");
+        const trimmed_data = std.mem.trimEnd(u8, data, " ");
         try self.write(self.current_row, self.segment_offsets.items[self.current_row], formatted_label);
         try self.write(self.current_row, self.segment_offsets.items[self.current_row] + formatted_label.len, trimmed_data);
         self.segment_offsets.items[self.current_row] += label.len + data.len;
@@ -93,7 +93,7 @@ pub const Buffer = struct {
         const formatted_label = try std.fmt.allocPrint(self.allocator, "{s}{s}:\x1b[0m ", .{ color, label });
         defer self.allocator.free(formatted_label);
 
-        var lines = std.mem.split(u8, data, "\n");
+        var lines = std.mem.splitSequence(u8, data, "\n");
         while (lines.next()) |line| {
             const trimmed_line = std.mem.trim(u8, line, " \t\r\n");
             if (trimmed_line.len == 0) continue;
@@ -106,7 +106,7 @@ pub const Buffer = struct {
 
     pub fn render(self: *const Buffer, writer: anytype) !void {
         for (self.lines.items[0..self.row_count]) |line| {
-            const trimmed_line = std.mem.trimRight(u8, line, " ");
+            const trimmed_line = std.mem.trimEnd(u8, line, " ");
             try writer.print("{s}\n", .{trimmed_line});
         }
     }

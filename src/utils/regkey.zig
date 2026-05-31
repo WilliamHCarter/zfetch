@@ -35,7 +35,7 @@ pub fn queryRegistryValue(allocator: std.mem.Allocator, reg_key: windows.HKEY, v
     }
 
     const result = try std.unicode.utf16LeToUtf8Alloc(allocator, buffer[0 .. buffer_size / 2]);
-    return std.mem.trimRight(u8, result, &[_]u8{0});
+    return std.mem.trimEnd(u8, result, &[_]u8{0});
 }
 
 pub fn queryRegistryDword(reg_key: windows.HKEY, value_name: [:0]const u16) !windows.DWORD {

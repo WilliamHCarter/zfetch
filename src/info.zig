@@ -41,7 +41,7 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
     var version_name: []const u8 = "";
 
     // Parse major and minor versions
-    var version_itr = std.mem.split(u8, version, ".");
+    var version_itr = std.mem.splitSequence(u8, version, ".");
     const major_str = version_itr.next() orelse return VersionError.InvalidVersion;
     const major = try std.fmt.parseInt(u32, major_str, 10);
 
@@ -51,7 +51,7 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
 
     // Find the matching version name by comparing each range
     for (version_ranges) |range| {
-        var range_itr = std.mem.split(u8, range[0], ".");
+        var range_itr = std.mem.splitSequence(u8, range[0], ".");
         const range_major_str = range_itr.next() orelse continue;
         const range_major = std.fmt.parseInt(u32, range_major_str, 10) catch continue;
 
@@ -489,3 +489,16 @@ pub const logo_list = [_]LogoInfo{
     LogoInfo.init(&.{"nomadbsd"}, &.{.fg_blue}, .fg_blue, .fg_white),
     LogoInfo.init(&.{"nurunner"}, &.{ .fg_blue, .fg_white }, null, null),
 };
+
+//================================== Tests =====================================
+test "darwinVersionName maps known macOS versions" {
+    try std.testing.expectEqualStrings("Cheetah", try darwinVersionName("10.0"));
+    try std.testing.expectEqualStrings("Catalina", try darwinVersionName("10.15.7"));
+    try std.testing.expectEqualStrings("Big Sur", try darwinVersionName("11.7"));
+    try std.testing.expectEqualStrings("Sequoia", try darwinVersionName("15.0"));
+}
+
+test "darwinVersionName rejects invalid versions" {
+    try std.testing.expectError(error.InvalidCharacter, darwinVersionName("not-a-version"));
+    try std.testing.expectError(VersionError.UnknownVersion, darwinVersionName("9.9"));
+}

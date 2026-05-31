@@ -161,3 +161,36 @@ pub fn getAllThemes() !std.ArrayList(Theme) {
     }
     return themes;
 }
+
+//================================== Tests =====================================
+test "parseCommand maps supported command aliases" {
+    try std.testing.expectEqual(Command.Theme, try parseCommand("--theme"));
+    try std.testing.expectEqual(Command.Theme, try parseCommand("-t"));
+    try std.testing.expectEqual(Command.ListThemes, try parseCommand("--list-themes"));
+    try std.testing.expectEqual(Command.ListThemes, try parseCommand("-lt"));
+    try std.testing.expectEqual(Command.Component, try parseCommand("--component"));
+    try std.testing.expectEqual(Command.Component, try parseCommand("-c"));
+    try std.testing.expectEqual(Command.ListComponents, try parseCommand("--list-components"));
+    try std.testing.expectEqual(Command.ListComponents, try parseCommand("-lc"));
+    try std.testing.expectEqual(Command.CustomLogo, try parseCommand("--logo"));
+    try std.testing.expectEqual(Command.CustomLogo, try parseCommand("-l"));
+    try std.testing.expectEqual(Command.Help, try parseCommand("--help"));
+    try std.testing.expectEqual(Command.Help, try parseCommand("-h"));
+}
+
+test "parseCommand rejects unknown commands" {
+    try std.testing.expectError(CommandError.InvalidCommand, parseCommand("--not-a-command"));
+}
+
+test "embedded themes are available and parseable" {
+    const themes = try getAllThemes();
+    try std.testing.expect(themes.items.len > 0);
+
+    var saw_default = false;
+    for (themes.items) |theme| {
+        if (std.mem.eql(u8, theme.name, "default")) saw_default = true;
+        const parsed = try layout.loadTheme(theme.content);
+        try std.testing.expect(parsed.components.items.len > 0);
+    }
+    try std.testing.expect(saw_default);
+}

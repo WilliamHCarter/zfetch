@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: native / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.1
+
+      - name: Zig version
+        run: zig version
+
+      - name: Format check
+        shell: bash
+        run: zig fmt --check $(git ls-files '*.zig')
+
+      - name: Build Debug
+        run: zig build --summary all
+
+      - name: Unit tests
+        run: zig build test --summary all
+
+      - name: Smoke help
+        run: zig build smoke --summary all
+
+      - name: CLI smoke and capture output
+        shell: bash
+        run: |
+          BIN="./zig-out/bin/zfetch"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then BIN="./zig-out/bin/zfetch.exe"; fi
+
+          "$BIN" --help 2>&1 | tee zfetch-help.txt
+          "$BIN" --list-components 2>&1 | tee zfetch-components.txt
+          "$BIN" --list-themes 2>&1 | tee zfetch-themes.txt
+          "$BIN" --component OS 2>&1 | tee zfetch-os.txt
+          "$BIN" --theme minimal 2>&1 | tee zfetch-minimal.txt
+
+          grep -q "Usage: zfetch" zfetch-help.txt
+          grep -q "OS" zfetch-components.txt
+          grep -q "default" zfetch-themes.txt
+          test -s zfetch-os.txt
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## zfetch CI" >> "$GITHUB_STEP_SUMMARY"
+          echo "- OS: ${{ runner.os }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Runner: ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Zig: $(zig version)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Native build/test/smoke completed" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.os }}
+          path: |
+            zfetch-*.txt
+            .zig-cache/**/*.log
+          if-no-files-found: ignore
+
+  cross-compile:
+    name: cross / ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-linux-gnu
+          - runner: ubuntu-latest
+            target: x86_64-linux-musl
+          - runner: ubuntu-latest
+            target: aarch64-linux-gnu
+          - runner: ubuntu-latest
+            target: aarch64-linux-musl
+          - runner: macos-latest
+            target: x86_64-macos
+          - runner: macos-latest
+            target: aarch64-macos
+          - runner: windows-latest
+            target: x86_64-windows-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.1
+
+      - name: Cross-target compile
+        run: zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSafe --summary all
