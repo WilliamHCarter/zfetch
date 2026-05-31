@@ -71,5 +71,5 @@ pub fn getMachMemoryStats() !u64 {
     }
 
     const page_size = sysctlGetU64("hw.pagesize") catch 4096;
-    return (@as(u64, vm_stat.active_count) + @as(u64, vm_stat.wire_count)) * page_size;
+    return (@as(u64, vm_stat.active_count) + @as(u64, vm_stat.wire_count) + @as(u64, vm_stat.compressor_page_count)) * page_size;
 }

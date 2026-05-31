@@ -85,10 +85,11 @@ const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig") else s
 const Logo = @import("utils/logo.zig").LogoInfo;
 const logos = @import("logos");
 
+pub var process_io: std.Io = std.Io.Threaded.global_single_threaded.io();
+
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
-    const result = std.process.run(allocator, io, .{
+    const result = std.process.run(allocator, process_io, .{
         .argv = argv,
         .stdout_limit = .limited(32768),
         .stderr_limit = .limited(8192),

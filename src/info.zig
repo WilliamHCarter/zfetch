@@ -37,6 +37,7 @@ pub fn darwinVersionName(version: []const u8) ![]const u8 {
         .{ "13", "Ventura" },
         .{ "14", "Sonoma" },
         .{ "15", "Sequoia" },
+        .{ "26", "Tahoe" },
     };
     var version_name: []const u8 = "";
 
