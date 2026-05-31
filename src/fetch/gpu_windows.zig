@@ -7,7 +7,7 @@ pub fn getWindowsGPU(allocator: std.mem.Allocator) ![]const u8 {
     const value = std.unicode.utf8ToUtf16LeStringLiteral("DriverDesc");
 
     const reg_key = try regkey.openRegistryKey(windows.HKEY_LOCAL_MACHINE, sub_key);
-    defer _ = windows.advapi32.RegCloseKey(reg_key);
+    defer _ = regkey.closeRegistryKey(reg_key);
 
     return regkey.queryRegistryValue(allocator, reg_key, value);
 }

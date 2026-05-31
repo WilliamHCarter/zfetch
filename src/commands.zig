@@ -153,8 +153,8 @@ pub const Theme = struct {
 
 pub const theme_names = themes_list.names;
 
-pub fn getAllThemes() !std.ArrayList(Theme) {
-    var themes = std.ArrayList(Theme).init(std.heap.page_allocator);
+pub fn getAllThemes() !std.array_list.Managed(Theme) {
+    var themes = std.array_list.Managed(Theme).init(std.heap.page_allocator);
 
     inline for (theme_names) |name| {
         try themes.append(Theme{ .name = name, .content = @embedFile(name) });

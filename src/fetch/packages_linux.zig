@@ -1,5 +1,4 @@
 const std = @import("std");
-const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
@@ -26,7 +25,7 @@ pub fn getLinuxPackages(allocator: std.mem.Allocator) ![]const u8 {
         thread.join();
     }
 
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.array_list.Managed(u8).init(allocator);
     defer list.deinit();
 
     var has_previous = false;
@@ -71,13 +70,14 @@ fn getSnapPackages(counts: *PackageCounts) !void {
 }
 
 fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
-    var dir = fs.openDirAbsolute(dir_path, .{ .iterate = true }) catch return 0;
-    defer dir.close();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var dir = std.Io.Dir.openDirAbsolute(io, dir_path, .{ .iterate = true }) catch return 0;
+    defer dir.close(io);
 
     var count: usize = 0;
     var iter = dir.iterate();
 
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, extension)) {
             count += 1;
         }
@@ -86,12 +86,13 @@ fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
 }
 
 fn countDirectories(dir_path: []const u8) !usize {
-    var dir = fs.openDirAbsolute(dir_path, .{ .iterate = true }) catch return 0;
-    defer dir.close();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var dir = std.Io.Dir.openDirAbsolute(io, dir_path, .{ .iterate = true }) catch return 0;
+    defer dir.close(io);
 
     var count: usize = 0;
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .directory) {
             count += 1;
         }

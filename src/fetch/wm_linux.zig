@@ -1,7 +1,8 @@
 const std = @import("std");
+const env = @import("../utils/env.zig");
 const mem = std.mem;
 const fs = std.fs;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
 const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxWM(allocator: mem.Allocator) ![]const u8 {
@@ -15,7 +16,7 @@ pub fn getLinuxWM(allocator: mem.Allocator) ![]const u8 {
 }
 
 fn isWayland() bool {
-    if (std.process.getEnvVarOwned(std.heap.page_allocator, "WAYLAND_DISPLAY")) |wayland_display| {
+    if (env.getEnvVarOwned(std.heap.page_allocator, "WAYLAND_DISPLAY")) |wayland_display| {
         defer std.heap.page_allocator.free(wayland_display);
         return wayland_display.len > 0;
     } else |_| {
@@ -83,8 +84,8 @@ fn getX11WMUsingXprop(allocator: mem.Allocator) ![]const u8 {
 }
 
 fn getWaylandSocketPath(allocator: mem.Allocator) ![]const u8 {
-    const xdg_runtime_dir = try std.process.getEnvVarOwned(allocator, "XDG_RUNTIME_DIR");
-    const wayland_display = try std.process.getEnvVarOwned(allocator, "WAYLAND_DISPLAY");
+    const xdg_runtime_dir = try env.getEnvVarOwned(allocator, "XDG_RUNTIME_DIR");
+    const wayland_display = try env.getEnvVarOwned(allocator, "WAYLAND_DISPLAY");
 
     return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ xdg_runtime_dir, wayland_display });
 }

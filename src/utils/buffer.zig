@@ -14,23 +14,23 @@ pub const BufferError = error{
 };
 
 pub const Buffer = struct {
-    lines: std.ArrayList([]u8),
+    lines: std.array_list.Managed([]u8),
     allocator: std.mem.Allocator,
     width: usize,
     row_count: usize = 0,
     current_row: usize = 0,
 
-    segment_offsets: std.ArrayList(usize),
+    segment_offsets: std.array_list.Managed(usize),
     logo_width: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, initial_width: usize) !Buffer {
-        var lines = std.ArrayList([]u8).init(allocator);
+        var lines = std.array_list.Managed([]u8).init(allocator);
         for (0..2) |_| {
             const line = try allocator.alloc(u8, initial_width);
             @memset(line, ' ');
             try lines.append(line);
         }
-        var segment_offsets = std.ArrayList(usize).init(allocator);
+        var segment_offsets = std.array_list.Managed(usize).init(allocator);
         try segment_offsets.append(0);
         return Buffer{ .lines = lines, .allocator = allocator, .width = initial_width, .row_count = 1, .segment_offsets = segment_offsets };
     }
@@ -112,7 +112,7 @@ pub const Buffer = struct {
     }
 
     pub fn stripTerminalCodes(self: *Buffer, input: []const u8) !usize {
-        var output = try std.ArrayList(u8).initCapacity(self.allocator, input.len);
+        var output = try std.array_list.Managed(u8).initCapacity(self.allocator, input.len);
         defer output.deinit();
 
         var i: usize = 0;
@@ -189,10 +189,10 @@ test "Buffer render" {
     try buffer.insert("Hello");
     try buffer.insert("World");
 
-    var output = std.ArrayList(u8).init(allocator);
+    var output = std.array_list.Managed(u8).init(allocator);
     defer output.deinit();
 
-    try buffer.render(output.writer());
+    try buffer.render(&output);
 
     const expected = "Hello\nWorld\n\n";
     try testing.expectEqualStrings(expected, output.items);

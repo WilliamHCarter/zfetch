@@ -1,6 +1,6 @@
 const std = @import("std");
+const env = @import("../utils/env.zig");
 const builtin = @import("builtin");
-const fs = std.fs;
 const mem = std.mem;
 
 pub const HostInfo = struct {
@@ -43,13 +43,13 @@ pub fn getLinuxHost(allocator: mem.Allocator) ![]const u8 {
         host.name = try allocator.dupe(u8, nameBuffer);
     }
 
-    const wsl_distro_name = std.process.getEnvVarOwned(allocator, "WSL_DISTRO_NAME") catch null;
+    const wsl_distro_name = env.getEnvVarOwned(allocator, "WSL_DISTRO_NAME") catch null;
     if (wsl_distro_name) |wsl_distro| {
         host.name = try std.fmt.allocPrint(allocator, "Windows Subsystem for Linux - {s}", .{wsl_distro});
         host.family = "WSL";
     } else {
-        const wsl_distro = std.process.getEnvVarOwned(allocator, "WSL_DISTRO") catch null;
-        const wsl_interop = std.process.getEnvVarOwned(allocator, "WSL_INTEROP") catch null;
+        const wsl_distro = env.getEnvVarOwned(allocator, "WSL_DISTRO") catch null;
+        const wsl_interop = env.getEnvVarOwned(allocator, "WSL_INTEROP") catch null;
         if (wsl_distro != null or wsl_interop != null) {
             host.name = "Windows Subsystem for Linux";
             host.family = "WSL";
@@ -83,7 +83,7 @@ fn cleanPlaceholder(content: []const u8) ![]const u8 {
 }
 
 fn joinNonEmpty(allocator: mem.Allocator, strings: []const []const u8) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
+    var result = std.array_list.Managed(u8).init(allocator);
     defer result.deinit();
 
     var first = true;
@@ -101,9 +101,8 @@ fn joinNonEmpty(allocator: mem.Allocator, strings: []const []const u8) ![]const 
 }
 
 fn getFileContent(allocator: mem.Allocator, path: []const u8) !?[]const u8 {
-    const file = fs.cwd().openFile(path, .{}) catch return null;
-    defer file.close();
-    const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return null;
     return mem.trim(u8, content, &std.ascii.whitespace);
 }
 

@@ -1,13 +1,22 @@
 const std = @import("std");
 const windows = std.os.windows;
+const KEY_READ: windows.DWORD = 0x00020019;
+
+extern "advapi32" fn RegOpenKeyExW(hKey: windows.HKEY, lpSubKey: [*:0]const u16, ulOptions: windows.DWORD, samDesired: windows.DWORD, phkResult: *windows.HKEY) windows.LSTATUS;
+extern "advapi32" fn RegQueryValueExW(hKey: windows.HKEY, lpValueName: [*:0]const u16, lpReserved: ?*windows.DWORD, lpType: ?*windows.DWORD, lpData: ?*windows.BYTE, lpcbData: *windows.DWORD) windows.LSTATUS;
+extern "advapi32" fn RegCloseKey(hKey: windows.HKEY) windows.LSTATUS;
+
+pub fn closeRegistryKey(hkey: windows.HKEY) windows.LSTATUS {
+    return RegCloseKey(hkey);
+}
 
 pub fn openRegistryKey(hkey: windows.HKEY, sub_key: [:0]const u16) !windows.HKEY {
     var reg_key: windows.HKEY = undefined;
-    const open_res = windows.advapi32.RegOpenKeyExW(
+    const open_res = RegOpenKeyExW(
         hkey,
         sub_key,
         0,
-        windows.KEY_READ,
+        KEY_READ,
         &reg_key,
     );
 
@@ -21,12 +30,12 @@ pub fn openRegistryKey(hkey: windows.HKEY, sub_key: [:0]const u16) !windows.HKEY
 pub fn queryRegistryValue(allocator: std.mem.Allocator, reg_key: windows.HKEY, value_name: [:0]const u16) ![]const u8 {
     var buffer: [255]u16 = undefined;
     var buffer_size: windows.DWORD = 255 * 2;
-    const query_res = windows.advapi32.RegQueryValueExW(
+    const query_res = RegQueryValueExW(
         reg_key,
         value_name,
         null,
         null,
-        @as(?*windows.BYTE, @ptrCast(&buffer)),
+        @ptrCast(&buffer),
         &buffer_size,
     );
 
@@ -43,7 +52,7 @@ pub fn queryRegistryDword(reg_key: windows.HKEY, value_name: [:0]const u16) !win
     var buffer_size: windows.DWORD = @sizeOf(windows.DWORD);
     var value_type: windows.DWORD = undefined;
 
-    const query_res = windows.advapi32.RegQueryValueExW(
+    const query_res = RegQueryValueExW(
         reg_key,
         value_name,
         null,

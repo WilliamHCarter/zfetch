@@ -3,7 +3,7 @@
     .fingerprint = 0x5fb01b5a9bf9e7cf,
     .version = "0.1.0",
     .description = "A command-line system information tool written in Zig",
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.16.0",
     .paths = .{
         "src",
         "themes", // Theme files that get embedded

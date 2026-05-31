@@ -1,10 +1,10 @@
 const std = @import("std");
-const process = std.process;
+const env = @import("../utils/env.zig");
 const fs = std.fs;
 const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
-    const xdg_current_desktop = try process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
+    const xdg_current_desktop = try env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
 
     if (xdg_current_desktop.len > 0) {
         var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
@@ -71,7 +71,7 @@ fn getMATEVersion(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn getCinnamonVersion(allocator: std.mem.Allocator) ![]const u8 {
-    if (process.getEnvVarOwned(allocator, "CINNAMON_VERSION")) |version| {
+    if (env.getEnvVarOwned(allocator, "CINNAMON_VERSION")) |version| {
         return version;
     } else |_| {
         return execCommand(allocator, &[_][]const u8{ "cinnamon", "--version" }, "");
@@ -96,14 +96,11 @@ fn getUnityVersion(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn readVersionFromFile(allocator: std.mem.Allocator, file_path: []const u8, search_string: []const u8) !?[]const u8 {
-    const file = try std.fs.openFileAbsolute(file_path, .{});
-    defer file.close();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(1024 * 1024));
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-
-    var buf: [1024]u8 = undefined;
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+    var lines = std.mem.splitSequence(u8, content, "\n");
+    while (lines.next()) |line| {
         if (std.mem.indexOf(u8, line, search_string)) |index| {
             const version_start = index + search_string.len;
             const version = std.mem.trim(u8, line[version_start..], &std.ascii.whitespace);
@@ -115,7 +112,7 @@ fn readVersionFromFile(allocator: std.mem.Allocator, file_path: []const u8, sear
 }
 
 fn detectDEFallback(allocator: std.mem.Allocator) ![]const u8 {
-    const desktop_session = try process.getEnvVarOwned(allocator, "DESKTOP_SESSION");
+    const desktop_session = try env.getEnvVarOwned(allocator, "DESKTOP_SESSION");
 
     if (desktop_session.len > 0) {
         const name = try allocator.dupe(u8, fs.path.basename(desktop_session));

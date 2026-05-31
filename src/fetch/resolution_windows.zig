@@ -1,8 +1,5 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const cwin = if (builtin.os.tag == .windows) @cImport({
-    @cInclude("windows.h");
-}) else undefined;
+const cwin = @import("../utils/windows.zig");
 
 fn nativeResolution(allocator: std.mem.Allocator) ![]const u8 {
     var display_device = std.mem.zeroes(cwin.DISPLAY_DEVICEW);
@@ -11,11 +8,11 @@ fn nativeResolution(allocator: std.mem.Allocator) ![]const u8 {
     var dev_mode = std.mem.zeroes(cwin.DEVMODEW);
     dev_mode.dmSize = @sizeOf(cwin.DEVMODEW);
 
-    if (cwin.EnumDisplayDevicesW(null, 0, &display_device, 0) == 0) {
+    if (!cwin.EnumDisplayDevicesW(null, 0, &display_device, 0).toBool()) {
         return error.EnumDisplayDevicesFailed;
     }
 
-    if (cwin.EnumDisplaySettingsW(&display_device.DeviceName, 0xFFFFFFFF, &dev_mode) == 0) {
+    if (!cwin.EnumDisplaySettingsW(&display_device.DeviceName, 0xFFFFFFFF, &dev_mode).toBool()) {
         return error.EnumDisplaySettingsFailed;
     }
 

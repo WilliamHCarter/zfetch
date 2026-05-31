@@ -1,47 +1,47 @@
 const std = @import("std");
-const fetch = @import("fetch.zig");
-const layout = @import("layout.zig");
 const commands = @import("commands.zig");
 
-pub fn main() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const err = gpa.deinit();
-        if (err == .leak) std.debug.print("Memory leaks detected: {}\n", .{err});
-    }
-
-    zfetch(allocator) catch |err| {
-        const stderr = std.io.getStdErr().writer();
+pub fn main(init: std.process.Init) !void {
+    zfetch(init.minimal.args, init.gpa) catch |err| {
         switch (err) {
-            error.InvalidCommand => stderr.print("Invalid command. Use 'zfetch help' to see available commands.\n", .{}) catch {},
-            error.MissingArgument => stderr.print("Missing argument for the command. Use 'zfetch help' for usage information.\n", .{}) catch {},
-            error.InvalidTheme => stderr.print("The specified theme is invalid or not found. Use 'zfetch list-themes' to see available themes.\n", .{}) catch {},
-            error.InvalidComponent => stderr.print("The specified component is invalid or not found. Use 'zfetch list-components' to see available components.\n", .{}) catch {},
-            error.FileNotFound => stderr.print("A required file was not found. Please check your installation and theme files.\n", .{}) catch {},
-            error.OutOfMemory => stderr.print("Out of memory. Try closing other applications or increasing available memory.\n", .{}) catch {},
-            error.AccessDenied => stderr.print("Access denied. Try running the program with higher privileges.\n", .{}) catch {},
-            error.InvalidArgument => stderr.print("Invalid argument provided. Use 'zfetch help' for usage information.\n", .{}) catch {},
-            else => stderr.print("An unexpected error occurred. Please report this issue.\n", .{}) catch {},
+            error.InvalidCommand => std.debug.print("Invalid command. Use 'zfetch help' to see available commands.\n", .{}),
+            error.MissingArgument => std.debug.print("Missing argument for the command. Use 'zfetch help' for usage information.\n", .{}),
+            error.InvalidTheme => std.debug.print("The specified theme is invalid or not found. Use 'zfetch list-themes' to see available themes.\n", .{}),
+            error.InvalidComponent => std.debug.print("The specified component is invalid or not found. Use 'zfetch list-components' to see available components.\n", .{}),
+            error.FileNotFound => std.debug.print("A required file was not found. Please check your installation and theme files.\n", .{}),
+            error.OutOfMemory => std.debug.print("Out of memory. Try closing other applications or increasing available memory.\n", .{}),
+            error.AccessDenied => std.debug.print("Access denied. Try running the program with higher privileges.\n", .{}),
+            error.InvalidArgument => std.debug.print("Invalid argument provided. Use 'zfetch help' for usage information.\n", .{}),
+            else => std.debug.print("An unexpected error occurred. Please report this issue.\n", .{}),
         }
-        stderr.print("Error: {s}\n", .{@errorName(err)}) catch {};
+        std.debug.print("Error: {s}\n", .{@errorName(err)});
         std.process.exit(1);
     };
 }
 
-fn zfetch(allocator: std.mem.Allocator) !void {
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+fn zfetch(process_args: std.process.Args, allocator: std.mem.Allocator) !void {
+    var arg_iter = try std.process.Args.Iterator.initAllocator(process_args, allocator);
+    defer arg_iter.deinit();
 
-    if (args.len < 2) return try commands.default(allocator);
+    var args = std.array_list.Managed([]const u8).init(allocator);
+    defer {
+        for (args.items) |arg| allocator.free(arg);
+        args.deinit();
+    }
 
-    const cmd = try commands.parseCommand(args[1]);
+    while (arg_iter.next()) |arg| {
+        try args.append(try allocator.dupe(u8, arg));
+    }
+
+    if (args.items.len < 2) return try commands.default(allocator);
+
+    const cmd = try commands.parseCommand(args.items[1]);
     switch (cmd) {
-        .Theme => try commands.loadGivenTheme(args[2..], allocator),
+        .Theme => try commands.loadGivenTheme(args.items[2..], allocator),
         .ListThemes => try commands.listThemes(),
-        .Component => try commands.component(args[2..]),
+        .Component => try commands.component(args.items[2..]),
         .ListComponents => try commands.listComponents(),
-        .CustomLogo => try commands.customLogo(args[2..], allocator),
+        .CustomLogo => try commands.customLogo(args.items[2..], allocator),
         .Help => try commands.help(),
     }
 }

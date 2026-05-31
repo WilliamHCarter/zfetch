@@ -56,4 +56,4 @@ Release CI should be separate and should upload `zfetch` / `zfetch.exe` plus che
 
 ## Current Zig version decision
 
-A direct jump to Zig `0.16.0` fixes the local macOS 26 linker issue, but introduces larger breaking changes in stdlib I/O, filesystem, allocator, timer, and macOS framework `@cImport` handling. The lower-risk upgrade for this CI pass is Zig `0.14.1`; it keeps code changes manageable while moving off `0.13.0`. The remaining macOS 26 local linker issue should be validated separately against GitHub-hosted macOS runners.
+A direct jump to Zig `0.16.0` fixes the local macOS 26 linker issue, but introduces larger breaking changes in stdlib I/O, filesystem, allocator, timer, and macOS framework `@cImport` handling. The lower-risk upgrade for this CI pass is Zig `0.16.0`; it keeps code changes manageable while moving off `0.13.0`. The remaining macOS 26 local linker issue should be validated separately against GitHub-hosted macOS runners.

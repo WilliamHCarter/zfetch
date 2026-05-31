@@ -1,12 +1,12 @@
 const std = @import("std");
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
-const process = std.process;
+const env = @import("../utils/env.zig");
 const fetch = @import("../fetch.zig");
 const windows = @import("std.os.windows");
 
 pub fn getWindowsPackages(allocator: Allocator) ![]const u8 {
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.array_list.Managed(u8).init(allocator);
     defer list.deinit();
 
     var has_previous = false;
@@ -31,7 +31,7 @@ pub fn getWindowsPackages(allocator: Allocator) ![]const u8 {
 }
 
 fn getChocoPackages(allocator: Allocator) !usize {
-    const choco_env = process.getEnvVarOwned(allocator, "ChocolateyInstall") catch {
+    const choco_env = env.getEnvVarOwned(allocator, "ChocolateyInstall") catch {
         return 0;
     };
 
@@ -41,12 +41,12 @@ fn getChocoPackages(allocator: Allocator) !usize {
 
 fn getScoopPackages(allocator: Allocator) !usize {
     var scoop_path: []const u8 = undefined;
-    const scoop_env: []u8 = process.getEnvVarOwned(allocator, "SCOOP") catch &[_]u8{};
+    const scoop_env: []u8 = env.getEnvVarOwned(allocator, "SCOOP") catch &[_]u8{};
 
     if (scoop_env.len != 0) {
         scoop_path = try fs.path.join(allocator, &[_][]const u8{ scoop_env, "apps" });
     } else {
-        const home_dir = try process.getEnvVarOwned(allocator, "USERPROFILE");
+        const home_dir = try env.getEnvVarOwned(allocator, "USERPROFILE");
         scoop_path = try fs.path.join(allocator, &[_][]const u8{ home_dir, "scoop", "apps" });
     }
 
@@ -78,14 +78,15 @@ fn getScoopPackages(allocator: Allocator) !usize {
 
 fn countDirs(path: []const u8) !usize {
     var count: usize = 0;
-    var dir = fs.openDirAbsolute(path, .{ .iterate = true }) catch |err| {
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch |err| {
         std.debug.print("Error opening directory: {}\n", .{err});
         return count;
     };
 
-    defer dir.close();
+    defer dir.close(io);
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .directory) {
             count += 1;
         }

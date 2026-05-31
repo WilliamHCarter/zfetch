@@ -5,6 +5,7 @@
 //==================================================================================================
 
 const std = @import("std");
+const env = @import("utils/env.zig");
 const builtin = @import("builtin");
 const info = @import("info.zig");
 const cpu_linux = @import("fetch/cpu_linux.zig");
@@ -80,26 +81,24 @@ const memory = if (builtin.os.tag == .macos) @import("fetch/memory_macos.zig") e
 };
 const windows = std.os.windows;
 const regkey = if (builtin.os.tag == .windows) @import("utils/regkey.zig") else struct {};
-const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig").cwin else struct {};
+const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig") else struct {};
 const Logo = @import("utils/logo.zig").LogoInfo;
 const logos = @import("logos");
 
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
-    var child = std.process.Child.init(argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const result = std.process.run(allocator, io, .{
+        .argv = argv,
+        .stdout_limit = .limited(32768),
+        .stderr_limit = .limited(8192),
+    }) catch return allocator.dupe(u8, fallback);
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
 
-    const stdout = child.stdout orelse return fallback;
-    const stderr = child.stderr orelse return fallback;
+    if (result.stderr.len > 0) return error.CommandError;
 
-    const result = try stdout.reader().readAllAlloc(allocator, 32768);
-    const trimmed_result = std.mem.trim(u8, result, "\n");
-
-    const stderr_result = try stderr.reader().readAllAlloc(allocator, 8192);
-    if (stderr_result.len > 0) return error.CommandError;
-
+    const trimmed_result = std.mem.trim(u8, result.stdout, "\n");
     return allocator.dupe(u8, trimmed_result);
 }
 
@@ -181,7 +180,7 @@ fn windowsDevice(allocator: std.mem.Allocator) ![]const u8 {
     const value = std.unicode.utf8ToUtf16LeStringLiteral("SystemProductName");
 
     const reg_key = try regkey.openRegistryKey(windows.HKEY_LOCAL_MACHINE, sub_key);
-    defer _ = windows.advapi32.RegCloseKey(reg_key);
+    defer _ = regkey.closeRegistryKey(reg_key);
 
     return regkey.queryRegistryValue(allocator, reg_key, value);
 }
@@ -241,7 +240,7 @@ fn windowsCPU(allocator: std.mem.Allocator) ![]const u8 {
     const value = std.unicode.utf8ToUtf16LeStringLiteral("ProcessorNameString");
 
     const reg_key = try regkey.openRegistryKey(windows.HKEY_LOCAL_MACHINE, sub_key);
-    defer _ = windows.advapi32.RegCloseKey(reg_key);
+    defer _ = regkey.closeRegistryKey(reg_key);
 
     return regkey.queryRegistryValue(allocator, reg_key, value);
 }
@@ -252,17 +251,15 @@ pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
-    const file = try std.fs.openFileAbsolute("/proc/meminfo", .{});
-    defer file.close();
-
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/meminfo", allocator, .limited(1024 * 1024));
     var memTotal: u64 = 0;
     var memAvailable: u64 = 0;
 
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "MemTotal:") or std.mem.startsWith(u8, line, "MemAvailable:")) {
-            var it = std.mem.tokenize(u8, line, " \t");
+            var it = std.mem.tokenizeAny(u8, line, " \t");
             const label = it.next().?;
             const value = it.next() orelse return error.InvalidFormat;
             const parsed_value = try std.fmt.parseInt(u64, value, 10);
@@ -294,7 +291,7 @@ fn bsdMemory(allocator: std.mem.Allocator) ![]const u8 {
 fn windowsMemory(allocator: std.mem.Allocator) ![]const u8 {
     var memory_status: cwin.MEMORYSTATUSEX = undefined;
     memory_status.dwLength = @sizeOf(cwin.MEMORYSTATUSEX);
-    if (cwin.GlobalMemoryStatusEx(&memory_status) == 0) {
+    if (!cwin.GlobalMemoryStatusEx(&memory_status).toBool()) {
         return error.MemoryStatusFailed;
     }
 
@@ -315,21 +312,21 @@ fn formatUptime(allocator: std.mem.Allocator, uptime_seconds: u64) ![]const u8 {
     const hours = (uptime_seconds % (24 * 60 * 60)) / (60 * 60);
     const minutes = (uptime_seconds % (60 * 60)) / 60;
 
-    var result = std.ArrayList(u8).init(allocator);
+    var result = std.array_list.Managed(u8).init(allocator);
     defer result.deinit();
 
     if (days > 0) {
-        try result.writer().print("{d} day{s}", .{ days, if (days == 1) "" else "s" });
+        try result.print("{d} day{s}", .{ days, if (days == 1) "" else "s" });
     }
 
     if (hours > 0) {
         if (result.items.len > 0) try result.appendSlice(", ");
-        try result.writer().print("{d} hour{s}", .{ hours, if (hours == 1) "" else "s" });
+        try result.print("{d} hour{s}", .{ hours, if (hours == 1) "" else "s" });
     }
 
     if (minutes > 0 or (days == 0 and hours == 0)) {
         if (result.items.len > 0) try result.appendSlice(", ");
-        try result.writer().print("{d} min{s}", .{ minutes, if (minutes == 1) "" else "s" });
+        try result.print("{d} min{s}", .{ minutes, if (minutes == 1) "" else "s" });
     }
 
     return result.toOwnedSlice();
@@ -348,12 +345,8 @@ fn getBootTime(allocator: std.mem.Allocator) !i64 {
 }
 
 fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
-    const file = try std.fs.openFileAbsolute("/proc/uptime", .{});
-    defer file.close();
-
-    var buffer: [100]u8 = undefined;
-    const bytes_read = try file.read(&buffer);
-    const content = buffer[0..bytes_read];
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/uptime", allocator, .limited(100));
 
     var iter = std.mem.splitSequence(u8, content, " ");
     const uptime_str = iter.next() orelse return error.InvalidUptimeFormat;
@@ -363,9 +356,17 @@ fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
     return try allocator.dupe(u8, formatted_uptime);
 }
 
+fn currentTimestamp() !i64 {
+    var ts: std.posix.timespec = undefined;
+    switch (std.posix.errno(std.posix.system.clock_gettime(.REALTIME, &ts))) {
+        .SUCCESS => return ts.sec,
+        else => return error.TimeUnavailable,
+    }
+}
+
 fn darwinUptime(allocator: std.mem.Allocator) ![]const u8 {
     const boot_time = try getBootTime(allocator);
-    const current_time = std.time.timestamp();
+    const current_time = try currentTimestamp();
     if (current_time < boot_time) return error.InvalidBootTime;
 
     const uptime_seconds: u64 = @intCast(current_time - boot_time);
@@ -374,7 +375,7 @@ fn darwinUptime(allocator: std.mem.Allocator) ![]const u8 {
 
 fn bsdUptime(allocator: std.mem.Allocator) ![]const u8 {
     const boot_time = try getBootTime(allocator);
-    const current_time = std.time.timestamp();
+    const current_time = try currentTimestamp();
     if (current_time < boot_time) return error.InvalidBootTime;
 
     const uptime_seconds: u64 = @intCast(current_time - boot_time);
@@ -443,7 +444,7 @@ pub fn posixShell(allocator: std.mem.Allocator) ![]const u8 {
         .{ .name = "fish", .command = "echo $FISH_VERSION", .trim = "none" },
     };
 
-    const shell_path = try std.process.getEnvVarOwned(allocator, "SHELL");
+    const shell_path = try env.getEnvVarOwned(allocator, "SHELL");
     const shell_name = std.fs.path.basename(shell_path);
 
     for (shells) |shell| {
@@ -467,11 +468,11 @@ fn darwinShell(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn bsdShell(allocator: std.mem.Allocator) ![]const u8 {
-    return std.process.getEnvVarOwned(allocator, "SHELL");
+    return env.getEnvVarOwned(allocator, "SHELL");
 }
 
 fn windowsShell(allocator: std.mem.Allocator) ![]const u8 {
-    return std.process.getEnvVarOwned(allocator, "COMSPEC");
+    return env.getEnvVarOwned(allocator, "COMSPEC");
 }
 
 //================= Fetch Terminal =================
@@ -484,11 +485,11 @@ fn linuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn darwinTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return std.process.getEnvVarOwned(allocator, "TERM_PROGRAM");
+    return env.getEnvVarOwned(allocator, "TERM_PROGRAM");
 }
 
 fn bsdTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    return std.process.getEnvVarOwned(allocator, "TERM");
+    return env.getEnvVarOwned(allocator, "TERM");
 }
 
 fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
@@ -599,7 +600,7 @@ fn linuxTheme(allocator: std.mem.Allocator) ![]const u8 {
 
 fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
     const global_preferences = std.fs.path.join(allocator, &[_][]const u8{
-        try std.process.getEnvVarOwned(allocator, "HOME"),
+        try env.getEnvVarOwned(allocator, "HOME"),
         "Library",
         "Preferences",
         ".GlobalPreferences.plist",
@@ -618,7 +619,7 @@ fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
         else => "Blue",
     };
 
-    var result = std.ArrayList(u8).init(allocator);
+    var result = std.array_list.Managed(u8).init(allocator);
     try result.appendSlice(color);
     try result.appendSlice(" (");
     try result.appendSlice(theme);
@@ -677,7 +678,7 @@ pub fn logoFetcher(filename: []const u8) !Logo {
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) !Logo {
-    const xdg_current_desktop = try std.process.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
+    const xdg_current_desktop = try env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
     var distro = try allocator.dupe(u8, "linux");
     if (xdg_current_desktop.len > 0) {
         var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
@@ -707,7 +708,7 @@ pub fn getColors(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
+    var result = std.array_list.Managed(u8).init(allocator);
     errdefer result.deinit();
 
     const newline = if (builtin.os.tag == .windows) "\r\n" else "\n";
@@ -715,7 +716,7 @@ fn ansiColors(allocator: std.mem.Allocator) ![]const u8 {
 
     for ([_]u8{ 4, 10 }) |base| {
         for (0..8) |i| {
-            try result.writer().print("\x1b[{d}{d}m   ", .{ base, i });
+            try result.print("\x1b[{d}{d}m   ", .{ base, i });
         }
         try result.appendSlice("\x1b[0m\n");
     }
@@ -744,7 +745,7 @@ pub fn getUsername(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
-    const username = std.process.getEnvVarOwned(allocator, "USER") catch "Unknown";
+    const username = env.getEnvVarOwned(allocator, "USER") catch "Unknown";
     var hostname_buffer: [std.posix.HOST_NAME_MAX]u8 = undefined;
     const hostname = try std.posix.gethostname(&hostname_buffer);
 
@@ -752,8 +753,8 @@ pub fn UsernamePosix(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 pub fn UsernameWindows(allocator: std.mem.Allocator) ![]const u8 {
-    const username = std.process.getEnvVarOwned(allocator, "USERNAME") catch "Unknown";
-    const hostname = std.process.getEnvVarOwned(allocator, "COMPUTERNAME") catch "Unknown";
+    const username = env.getEnvVarOwned(allocator, "USERNAME") catch "Unknown";
+    const hostname = env.getEnvVarOwned(allocator, "COMPUTERNAME") catch "Unknown";
 
     return try std.fmt.allocPrint(allocator, "{s}@{s}", .{ username, hostname });
 }

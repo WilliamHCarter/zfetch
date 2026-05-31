@@ -11,19 +11,17 @@ pub fn getLinuxGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn getGPUInfoFromSys(allocator: std.mem.Allocator) ![]const u8 {
-    var dir = try std.fs.openDirAbsolute("/sys/class/drm", .{ .iterate = true });
-    defer dir.close();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var dir = try std.Io.Dir.openDirAbsolute(io, "/sys/class/drm", .{ .iterate = true });
+    defer dir.close(io);
 
-    var gpu_list = std.ArrayList([]const u8).init(allocator);
+    var gpu_list = std.array_list.Managed([]const u8).init(allocator);
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (std.mem.startsWith(u8, entry.name, "card") and !std.mem.endsWith(u8, entry.name, "-")) {
             const path = try std.fs.path.join(allocator, &[_][]const u8{ "/sys/class/drm", entry.name, "device", "product_name" });
-            const file = std.fs.openFileAbsolute(path, .{}) catch continue;
-            defer file.close();
-
-            const content = file.readToEndAlloc(allocator, 1024) catch continue;
+            const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024)) catch continue;
             const trimmed = std.mem.trim(u8, content, &std.ascii.whitespace);
             try gpu_list.append(try allocator.dupe(u8, trimmed));
         }
@@ -41,7 +39,7 @@ fn getGPUInfoFromLspci(allocator: std.mem.Allocator) ![]const u8 {
         "lspci", "-mm",
     }, "");
 
-    var gpu_list = std.ArrayList([]const u8).init(allocator);
+    var gpu_list = std.array_list.Managed([]const u8).init(allocator);
     defer gpu_list.deinit();
 
     var lines = std.mem.splitSequence(u8, result, "\n");

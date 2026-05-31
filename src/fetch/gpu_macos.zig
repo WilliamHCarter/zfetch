@@ -1,68 +1,45 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("IOKit/IOKitLib.h");
-    @cInclude("IOKit/graphics/IOGraphicsLib.h");
-    @cInclude("CoreFoundation/CoreFoundation.h");
-});
 
-fn cfStringToZigString(allocator: std.mem.Allocator, cfString: c.CFStringRef) ![]const u8 {
-    const length = c.CFStringGetLength(cfString);
-    const buffer = try allocator.alloc(u16, @intCast(length));
+fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const result = try std.process.run(allocator, io, .{
+        .argv = argv,
+        .stdout_limit = .limited(1024 * 1024),
+        .stderr_limit = .limited(8192),
+    });
+    defer allocator.free(result.stderr);
 
-    c.CFStringGetCharacters(cfString, c.CFRangeMake(0, length), buffer.ptr);
+    if (result.stderr.len > 0) {
+        allocator.free(result.stdout);
+        return error.CommandError;
+    }
 
-    return try std.unicode.utf16leToUtf8Alloc(allocator, buffer);
+    return result.stdout;
 }
 
 pub fn getMacosGPU(allocator: std.mem.Allocator) ![]const u8 {
-    var iterator: c.io_iterator_t = undefined;
-    const result = c.IOServiceGetMatchingServices(c.kIOMasterPortDefault, c.IOServiceMatching(c.kIOAcceleratorClassName), &iterator);
-    if (result != c.kIOReturnSuccess) {
+    const output = execCommand(allocator, &[_][]const u8{ "/usr/sbin/system_profiler", "SPDisplaysDataType" }) catch {
+        return try allocator.dupe(u8, "GPU Not Found");
+    };
+    defer allocator.free(output);
+
+    var gpus = std.array_list.Managed(u8).init(allocator);
+    var lines = std.mem.splitSequence(u8, output, "\n");
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t");
+        if (!std.mem.startsWith(u8, trimmed, "Chipset Model:")) continue;
+
+        const name = std.mem.trim(u8, trimmed["Chipset Model:".len..], " \t");
+        if (name.len == 0) continue;
+
+        if (gpus.items.len != 0) try gpus.appendSlice(", ");
+        try gpus.appendSlice(name);
+    }
+
+    if (gpus.items.len == 0) {
+        gpus.deinit();
         return try allocator.dupe(u8, "GPU Not Found");
     }
-    defer _ = c.IOObjectRelease(iterator);
 
-    var registryEntry: c.io_registry_entry_t = c.IOIteratorNext(iterator);
-    while (registryEntry != 0) {
-        defer _ = c.IOObjectRelease(registryEntry);
-
-        var properties: c.CFMutableDictionaryRef = undefined;
-        if (c.IORegistryEntryCreateCFProperties(registryEntry, &properties, c.kCFAllocatorDefault, 0) != c.kIOReturnSuccess) {
-            continue;
-        }
-        defer c.CFRelease(properties);
-
-        const modelKey = c.CFStringCreateWithCString(null, "model", c.kCFStringEncodingUTF8);
-        defer c.CFRelease(modelKey);
-
-        if (c.CFDictionaryContainsKey(properties, modelKey) == c.true) {
-            const value = c.CFDictionaryGetValue(properties, modelKey);
-            if (value != null and c.CFGetTypeID(value) == c.CFStringGetTypeID()) {
-                const cfString: c.CFStringRef = @ptrCast(value);
-                return cfStringToZigString(allocator, cfString) catch continue;
-            }
-        } else {
-            var parentEntry: c.io_registry_entry_t = undefined;
-            if (c.IORegistryEntryGetParentEntry(registryEntry, c.kIOServicePlane, &parentEntry) == c.kIOReturnSuccess) {
-                defer _ = c.IOObjectRelease(parentEntry);
-
-                var parentProperties: c.CFMutableDictionaryRef = undefined;
-                if (c.IORegistryEntryCreateCFProperties(parentEntry, &parentProperties, c.kCFAllocatorDefault, 0) == c.kIOReturnSuccess) {
-                    defer c.CFRelease(parentProperties);
-
-                    if (c.CFDictionaryContainsKey(parentProperties, modelKey) == c.true) {
-                        const value = c.CFDictionaryGetValue(parentProperties, modelKey);
-                        if (value != null and c.CFGetTypeID(value) == c.CFStringGetTypeID()) {
-                            const cfString: c.CFStringRef = @ptrCast(value);
-                            return cfStringToZigString(allocator, cfString) catch continue;
-                        }
-                    }
-                }
-            }
-        }
-
-        registryEntry = c.IOIteratorNext(iterator);
-    }
-
-    return try allocator.dupe(u8, "GPU Not Found");
+    return gpus.toOwnedSlice();
 }

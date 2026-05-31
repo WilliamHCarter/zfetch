@@ -1,4 +1,5 @@
 const std = @import("std");
+const env = @import("../utils/env.zig");
 
 pub const TerminalInfo = struct {
     name: []const u8,
@@ -22,7 +23,7 @@ pub fn fetchTerminal(allocator: std.mem.Allocator) !TerminalInfo {
 }
 
 fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: TerminalInfo) !bool {
-    if (std.process.getEnvVarOwned(allocator, temp.env_var)) |env_value| {
+    if (env.getEnvVarOwned(allocator, temp.env_var)) |env_value| {
         info.name = try allocator.dupe(u8, temp.name);
         info.pretty_name = if (temp.pretty_name.len > 0)
             try std.fmt.allocPrint(allocator, "{s} ({s})", .{ temp.pretty_name, env_value })
@@ -43,7 +44,7 @@ fn fetchFromEnv(allocator: std.mem.Allocator, info: *TerminalInfo) !bool {
     if (try envFetchHelper(allocator, info, initTerm("TERM", "", "TERM"))) return true;
     if (try envFetchHelper(allocator, info, initTerm("ConEmu", "ConEmu", "ConEmuPID"))) return true;
 
-    if (std.process.getEnvVarOwned(allocator, "TERM_PROGRAM")) |term_program| {
+    if (env.getEnvVarOwned(allocator, "TERM_PROGRAM")) |term_program| {
         if (std.mem.eql(u8, term_program, "vscode")) {
             info.name = try allocator.dupe(u8, "Code");
             info.pretty_name = try allocator.dupe(u8, "Visual Studio Code");

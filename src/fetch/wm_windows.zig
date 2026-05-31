@@ -9,8 +9,8 @@ extern "dwmapi" fn DwmIsCompositionEnabled(pfEnabled: *BOOL) BOOL;
 
 pub fn getWindowsWM(allocator: std.mem.Allocator) ![]const u8 {
     var isCompositionEnabled: BOOL = undefined;
-    if (DwmIsCompositionEnabled(&isCompositionEnabled) == 0) {
-        if (isCompositionEnabled != 0) {
+    if (!DwmIsCompositionEnabled(&isCompositionEnabled).toBool()) {
+        if (isCompositionEnabled.toBool()) {
             return std.fmt.allocPrint(allocator, "Desktop Window Manager", .{});
         }
     }

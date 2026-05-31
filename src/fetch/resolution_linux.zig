@@ -2,7 +2,7 @@ const std = @import("std");
 const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxResolution(allocator: std.mem.Allocator) ![]const u8 {
-    var resolution = std.ArrayList(u8).init(allocator);
+    var resolution = std.array_list.Managed(u8).init(allocator);
     defer resolution.deinit();
 
     if (hasCommand(allocator, "xrandr")) {

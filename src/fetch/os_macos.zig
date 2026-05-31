@@ -8,7 +8,8 @@ pub const OSResult = struct {
 
 pub fn parseOS(allocator: std.mem.Allocator) !OSResult {
     const file_path = "/System/Library/CoreServices/SystemVersion.plist";
-    const file_contents = try std.fs.cwd().readFileAlloc(allocator, file_path, std.math.maxInt(usize));
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const file_contents = try std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .unlimited);
 
     var result = OSResult{
         .name = undefined,

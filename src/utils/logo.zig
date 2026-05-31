@@ -7,8 +7,8 @@ pub const Ascii = struct {
     content: []const u8,
 };
 
-pub fn getAsciiList() !std.ArrayList(Ascii) {
-    var logo_lst = std.ArrayList(Ascii).init(std.heap.page_allocator);
+pub fn getAsciiList() !std.array_list.Managed(Ascii) {
+    var logo_lst = std.array_list.Managed(Ascii).init(std.heap.page_allocator);
     inline for (logos.names) |name| {
         try logo_lst.append(Ascii{ .name = name, .content = @embedFile(name) });
     }
@@ -72,7 +72,7 @@ pub const LogoInfo = struct {
             }
         }
         if (!logo_found) return error.LogoNotFound;
-        const ascii_list: std.ArrayList(Ascii) = try getAsciiList();
+        const ascii_list: std.array_list.Managed(Ascii) = try getAsciiList();
         for (ascii_list.items) |ascii_item| {
             if (logo.matchNames(ascii_item.name)) {
                 return logo.addAscii(ascii_item.content);
@@ -82,13 +82,9 @@ pub const LogoInfo = struct {
     }
 
     pub fn getLogoFromFile(filename: []const u8) !LogoInfo {
-        var buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const cwd = try std.fs.cwd().realpath(".", &buf);
-
-        const full_path = try std.fs.path.join(std.heap.page_allocator, &[_][]const u8{ cwd, filename });
-        defer std.heap.page_allocator.free(full_path);
-
-        const file_contents: []u8 = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, full_path, 40960);
+        _ = std.Io.Dir.max_path_bytes;
+        const io = std.Io.Threaded.global_single_threaded.io();
+        const file_contents: []u8 = try std.Io.Dir.cwd().readFileAlloc(io, filename, std.heap.page_allocator, .limited(40960));
         // defer std.heap.page_allocator.free(file_contents);
         std.debug.print("content: {s}\n", .{file_contents});
         const color_line: []Color = getCustomColorLine(file_contents) catch &[_]Color{};
@@ -117,7 +113,7 @@ pub fn getCustomColorLine(file_contents: []const u8) ![]Color {
     if (end_idx <= start_idx + start_marker.len) return error.InvalidFormat;
 
     const metadata = std.mem.trim(u8, file_contents[start_idx + start_marker.len .. end_idx], &std.ascii.whitespace);
-    var colors = std.ArrayList(Color).init(std.heap.page_allocator);
+    var colors = std.array_list.Managed(Color).init(std.heap.page_allocator);
     defer colors.deinit();
 
     var metadata_iter = std.mem.splitSequence(u8, metadata, ",");

@@ -1,10 +1,10 @@
 const std = @import("std");
 const fs = std.fs;
 const mem = std.mem;
-const process = std.process;
+const env = @import("../utils/env.zig");
 
 pub fn getMacosPackages(allocator: mem.Allocator) ![]const u8 {
-    var list = std.ArrayList(u8).init(allocator);
+    var list = std.array_list.Managed(u8).init(allocator);
     defer list.deinit();
 
     var has_previous = false;
@@ -27,7 +27,7 @@ pub fn getMacosPackages(allocator: mem.Allocator) ![]const u8 {
 }
 
 fn getBrewPackages(allocator: mem.Allocator) !usize {
-    const homebrew_prefix = process.getEnvVarOwned(allocator, "HOMEBREW_PREFIX") catch |err| switch (err) {
+    const homebrew_prefix = env.getEnvVarOwned(allocator, "HOMEBREW_PREFIX") catch |err| switch (err) {
         error.EnvironmentVariableNotFound => "/opt/homebrew",
         else => return err,
     };
@@ -37,7 +37,7 @@ fn getBrewPackages(allocator: mem.Allocator) !usize {
 }
 
 fn getMacPortsPackages(allocator: mem.Allocator) !usize {
-    const macports_prefix = process.getEnvVarOwned(allocator, "MACPORTS_PREFIX") catch {
+    const macports_prefix = env.getEnvVarOwned(allocator, "MACPORTS_PREFIX") catch {
         return 0;
     };
     const software_path = try fs.path.join(allocator, &[_][]const u8{ macports_prefix, "var", "macports", "software" });
@@ -46,14 +46,15 @@ fn getMacPortsPackages(allocator: mem.Allocator) !usize {
 
 fn countDirs(path: []const u8) !usize {
     var count: usize = 0;
-    var dir = fs.openDirAbsolute(path, .{ .iterate = true }) catch |err| {
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch |err| {
         std.debug.print("Error opening directory: {}\n", .{err});
         return count;
     };
 
-    defer dir.close();
+    defer dir.close(io);
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .directory) {
             count += 1;
         }

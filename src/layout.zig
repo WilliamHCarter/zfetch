@@ -55,12 +55,12 @@ pub const ComponentKind = enum {
 
 pub const Theme = struct {
     name: []const u8,
-    components: std.ArrayList(Component),
+    components: std.array_list.Managed(Component),
 
     pub fn init(name: []const u8) Theme {
         return .{
             .name = name,
-            .components = std.ArrayList(Component).init(std.heap.page_allocator),
+            .components = std.array_list.Managed(Component).init(std.heap.page_allocator),
         };
     }
 
@@ -155,14 +155,14 @@ pub fn parseComponent(component_str: []const u8) !Component {
     return component;
 }
 //================================== Fetching ==================================
-fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.ArrayList(FetchResult) {
-    var mutex = std.Thread.Mutex{};
-    var fetch_queue = std.ArrayList(Component).init(allocator);
+fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.array_list.Managed(FetchResult) {
+    var mutex: std.atomic.Mutex = .unlocked;
+    var fetch_queue = std.array_list.Managed(Component).init(allocator);
     defer fetch_queue.deinit();
 
     try fetch_queue.appendSlice(theme.components.items);
 
-    var results = std.ArrayList(FetchResult).init(allocator);
+    var results = std.array_list.Managed(FetchResult).init(allocator);
 
     var threads: [6]std.Thread = undefined;
     for (&threads) |*thread| {
@@ -183,14 +183,14 @@ fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.
 
 fn fetchWorker(
     allocator: std.mem.Allocator,
-    mutex: *std.Thread.Mutex,
-    fetch_queue: *std.ArrayList(Component),
-    fetch_results: *std.ArrayList(FetchResult),
+    mutex: *std.atomic.Mutex,
+    fetch_queue: *std.array_list.Managed(Component),
+    fetch_results: *std.array_list.Managed(FetchResult),
     timer: *Timer,
 ) !void {
     while (true) {
-        mutex.lock();
-        const component = if (fetch_queue.popOrNull()) |c| c else {
+        lock(mutex);
+        const component = if (fetch_queue.pop()) |c| c else {
             mutex.unlock();
             break;
         };
@@ -203,11 +203,17 @@ fn fetchWorker(
 
         try timer.endLap(lap_key, start_time);
 
-        mutex.lock();
+        lock(mutex);
         try fetch_results.append(.{ .component = component, .result = result });
         mutex.unlock();
 
         allocator.free(lap_key);
+    }
+}
+
+fn lock(mutex: *std.atomic.Mutex) void {
+    while (!mutex.tryLock()) {
+        std.atomic.spinLoopHint();
     }
 }
 
@@ -291,8 +297,11 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         try renderComponent(&buffer, result.component, result.result);
     }
 
-    const stdout = std.io.getStdOut().writer();
-    try buffer.render(stdout);
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    try buffer.render(&stdout_writer.interface);
+    try stdout_writer.interface.flush();
     try timer.endLap("render", start_time);
     // try timer.printResults(stdout);
 }
@@ -393,9 +402,13 @@ fn toFixedUnit(value: []const u8, unit: MemoryUnit, precision: u32, allocator: s
     };
 
     const floatValue: f64 = std.fmt.parseFloat(f64, std.mem.trim(u8, value, "\n")) catch -1.0;
-    var buffer: []u8 = allocator.alloc(u8, 100) catch undefined;
-    const formatted = std.fmt.formatFloat(buffer[0..], (floatValue / divisor), .{ .precision = precision, .mode = .decimal }) catch "-1.0";
-    return formatted;
+    return switch (precision) {
+        0 => std.fmt.allocPrint(allocator, "{d:.0}", .{floatValue / divisor}) catch "-1.0",
+        1 => std.fmt.allocPrint(allocator, "{d:.1}", .{floatValue / divisor}) catch "-1.0",
+        2 => std.fmt.allocPrint(allocator, "{d:.2}", .{floatValue / divisor}) catch "-1.0",
+        3 => std.fmt.allocPrint(allocator, "{d:.3}", .{floatValue / divisor}) catch "-1.0",
+        else => std.fmt.allocPrint(allocator, "{d}", .{floatValue / divisor}) catch "-1.0",
+    };
 }
 
 fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit, precision: u32, allocator: std.mem.Allocator) []const u8 {
@@ -482,7 +495,7 @@ fn processLine(line: []const u8, allocator: std.mem.Allocator, color_map: ColorM
 }
 
 fn getLineWidths(ascii_art: []const u8, allocator: std.mem.Allocator) ![]usize {
-    var widths = std.ArrayList(usize).init(allocator);
+    var widths = std.array_list.Managed(usize).init(allocator);
     errdefer widths.deinit();
 
     var lines = std.mem.splitSequence(u8, ascii_art, "\n");
@@ -511,7 +524,7 @@ fn intToANSI(allocator: std.mem.Allocator, index: usize, scheme: []const usize) 
 }
 
 fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: []usize) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
+    var result = std.array_list.Managed(u8).init(allocator);
     errdefer result.deinit();
     var color_found: bool = false;
     var current_color: ?usize = null;

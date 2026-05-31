@@ -1,10 +1,8 @@
 const std = @import("std");
 
 pub fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
-    const file = try std.fs.openFileAbsolute("/proc/cpuinfo", .{});
-    defer file.close();
-
-    const content = try file.readToEndAlloc(allocator, 1024 * 1024);
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/cpuinfo", allocator, .limited(1024 * 1024));
 
     var lines = std.mem.splitSequence(u8, content, "\n");
     var model_name: ?[]const u8 = null;

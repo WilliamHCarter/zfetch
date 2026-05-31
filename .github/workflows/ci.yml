@@ -25,7 +25,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.14.1
+          version: 0.16.0
 
       - name: Zig version
         run: zig version
@@ -108,7 +108,7 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.14.1
+          version: 0.16.0
 
       - name: Cross-target compile
         run: zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseSafe --summary all
