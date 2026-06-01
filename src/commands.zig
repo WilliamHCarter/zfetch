@@ -20,24 +20,23 @@ pub const CommandError = error{
     FileNotFound,
 };
 
-pub fn parseCommand(cmd: []const u8) !Command {
-    const KV = struct { []const u8, Command };
-    const map = try std.StaticStringMap(Command).init([_]KV{
-        .{ "--theme", .Theme },
-        .{ "-t", .Theme },
-        .{ "--list-themes", .ListThemes },
-        .{ "-lt", .ListThemes },
-        .{ "--component", .Component },
-        .{ "-c", .Component },
-        .{ "--list-components", .ListComponents },
-        .{ "-lc", .ListComponents },
-        .{ "--logo", .CustomLogo },
-        .{ "-l", .CustomLogo },
-        .{ "--help", .Help },
-        .{ "-h", .Help },
-    }, std.heap.page_allocator);
+const command_map = std.StaticStringMap(Command).initComptime(.{
+    .{ "--theme", .Theme },
+    .{ "-t", .Theme },
+    .{ "--list-themes", .ListThemes },
+    .{ "-lt", .ListThemes },
+    .{ "--component", .Component },
+    .{ "-c", .Component },
+    .{ "--list-components", .ListComponents },
+    .{ "-lc", .ListComponents },
+    .{ "--logo", .CustomLogo },
+    .{ "-l", .CustomLogo },
+    .{ "--help", .Help },
+    .{ "-h", .Help },
+});
 
-    return map.get(cmd) orelse CommandError.InvalidCommand;
+pub fn parseCommand(cmd: []const u8) !Command {
+    return command_map.get(cmd) orelse CommandError.InvalidCommand;
 }
 
 pub fn default(allocator: std.mem.Allocator) !void {
@@ -49,19 +48,19 @@ pub fn default(allocator: std.mem.Allocator) !void {
 }
 
 pub fn loadDefaultTheme() !layout.Theme {
-    const themes = try getAllThemes();
-    for (themes.items) |theme| {
+    const themes = getAllThemes();
+    for (themes) |theme| {
         if (std.mem.eql(u8, theme.name, "default")) {
             return layout.loadTheme(theme.content);
         }
     }
-    return layout.loadTheme(themes.items[0].content);
+    return layout.loadTheme(themes[0].content);
 }
 
 pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !void {
     if (args.len == 0) return CommandError.MissingArgument;
-    const themes = try getAllThemes();
-    for (themes.items) |theme| {
+    const themes = getAllThemes();
+    for (themes) |theme| {
         if (std.mem.eql(u8, theme.name, args[0])) {
             const given_theme = layout.loadTheme(theme.content) catch |err| {
                 std.debug.print("Failed to load theme {s}: {any}\n", .{ args[0], err });
@@ -73,8 +72,7 @@ pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !v
 }
 
 pub fn listThemes() !void {
-    const themes = try getAllThemes();
-    for (themes.items) |theme| {
+    for (getAllThemes()) |theme| {
         std.debug.print("  {s}\n", .{theme.name});
     }
 }
@@ -153,13 +151,16 @@ pub const Theme = struct {
 
 pub const theme_names = themes_list.names;
 
-pub fn getAllThemes() !std.array_list.Managed(Theme) {
-    var themes = std.array_list.Managed(Theme).init(std.heap.page_allocator);
-
-    inline for (theme_names) |name| {
-        try themes.append(Theme{ .name = name, .content = @embedFile(name) });
+const all_themes = blk: {
+    var themes: [theme_names.len]Theme = undefined;
+    for (theme_names, 0..) |name, i| {
+        themes[i] = .{ .name = name, .content = @embedFile(name) };
     }
-    return themes;
+    break :blk themes;
+};
+
+pub fn getAllThemes() []const Theme {
+    return &all_themes;
 }
 
 //================================== Tests =====================================
@@ -183,11 +184,11 @@ test "parseCommand rejects unknown commands" {
 }
 
 test "embedded themes are available and parseable" {
-    const themes = try getAllThemes();
-    try std.testing.expect(themes.items.len > 0);
+    const themes = getAllThemes();
+    try std.testing.expect(themes.len > 0);
 
     var saw_default = false;
-    for (themes.items) |theme| {
+    for (themes) |theme| {
         if (std.mem.eql(u8, theme.name, "default")) saw_default = true;
         const parsed = try layout.loadTheme(theme.content);
         try std.testing.expect(parsed.components.items.len > 0);

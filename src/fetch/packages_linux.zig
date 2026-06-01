@@ -41,7 +41,7 @@ pub fn getLinuxPackages(allocator: std.mem.Allocator) ![]const u8 {
     for (package_managers) |pm| {
         if (pm.count != 0) {
             if (has_previous) try list.appendSlice(", ");
-            try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} ({s})", .{ pm.count - 1, pm.name }));
+            try list.print("{d} ({s})", .{ pm.count - 1, pm.name });
             has_previous = true;
         }
     }

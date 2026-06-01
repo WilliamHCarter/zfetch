@@ -89,33 +89,6 @@ const Colors = struct {
 
 pub var col: Colors = undefined;
 
-const ColorMap = struct {
-    codes: [16][]const u8,
-
-    fn init() ColorMap {
-        return .{
-            .codes = .{
-                "\x1b[30m", // Black
-                "\x1b[31m", // Red
-                "\x1b[32m", // Green
-                "\x1b[33m", // Yellow
-                "\x1b[34m", // Blue
-                "\x1b[35m", // Magenta
-                "\x1b[36m", // Cyan
-                "\x1b[37m", // White
-                "\x1b[90m", // Bright Black
-                "\x1b[91m", // Bright Red
-                "\x1b[92m", // Bright Green
-                "\x1b[93m", // Bright Yellow
-                "\x1b[94m", // Bright Blue
-                "\x1b[95m", // Bright Magenta
-                "\x1b[96m", // Bright Cyan
-                "\x1b[97m", // Bright White
-            },
-        };
-    }
-};
-
 //================================== Parsing ===================================
 
 pub fn loadTheme(file: []const u8) !Theme {
@@ -157,12 +130,12 @@ pub fn parseComponent(component_str: []const u8) !Component {
 //================================== Fetching ==================================
 fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.array_list.Managed(FetchResult) {
     var mutex: std.atomic.Mutex = .unlocked;
-    var fetch_queue = std.array_list.Managed(Component).init(allocator);
+    var fetch_queue = try std.array_list.Managed(Component).initCapacity(allocator, theme.components.items.len);
     defer fetch_queue.deinit();
 
     try fetch_queue.appendSlice(theme.components.items);
 
-    var results = std.array_list.Managed(FetchResult).init(allocator);
+    var results = try std.array_list.Managed(FetchResult).initCapacity(allocator, theme.components.items.len);
 
     var threads: [6]std.Thread = undefined;
     for (&threads) |*thread| {
@@ -196,7 +169,8 @@ fn fetchWorker(
         };
         mutex.unlock();
 
-        const lap_key = try std.fmt.allocPrint(allocator, "fetch_{s}", .{@tagName(component.kind)});
+        var lap_key_buffer: [32]u8 = undefined;
+        const lap_key = try std.fmt.bufPrint(&lap_key_buffer, "fetch_{s}", .{@tagName(component.kind)});
         const start_time = try timer.startLap(lap_key);
 
         const result = fetchComponent(allocator, component);
@@ -206,8 +180,6 @@ fn fetchWorker(
         lock(mutex);
         try fetch_results.append(.{ .component = component, .result = result });
         mutex.unlock();
-
-        allocator.free(lap_key);
     }
 }
 
@@ -287,9 +259,9 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         const position = logo.component.properties.get("position") orelse "inline";
 
         switch (std.meta.stringToEnum(LogoPosition, position) orelse .Inline) {
-            .Top, .Left => fetch_results.insert(0, logo) catch {},
-            .Bottom, .Right => fetch_results.append(logo) catch {},
-            .Inline => fetch_results.insert(idx, logo) catch {},
+            .Top, .Left => try fetch_results.insert(0, logo),
+            .Bottom, .Right => try fetch_results.append(logo),
+            .Inline => try fetch_results.insert(idx, logo),
         }
     }
 
@@ -425,7 +397,7 @@ fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit,
 
 fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
     var memory = fetch.getMemory(allocator) catch "Fetch Error";
-    if (std.mem.eql(u8, memory, "Windows")) { //Temp hack, remove later
+    if (std.mem.eql(u8, memory, "Windows")) {
         return memory;
     }
 
@@ -486,37 +458,40 @@ const LogoPosition = enum {
     Inline,
 };
 
-fn processLine(line: []const u8, allocator: std.mem.Allocator, color_map: ColorMap) ![]const u8 {
-    var result = try allocator.dupe(u8, line);
-
-    for (color_map.codes, 0..) |color_code, i| {
-        const single_digit = try std.fmt.allocPrint(allocator, "${d}", .{i});
-        result = try std.mem.replaceOwned(u8, allocator, result, single_digit, color_code);
-
-        const curly_brace = try std.fmt.allocPrint(allocator, "${{c{d}}}", .{i});
-        result = try std.mem.replaceOwned(u8, allocator, result, curly_brace, color_code);
+fn visibleWidth(line: []const u8) usize {
+    var width: usize = 0;
+    var i: usize = 0;
+    while (i < line.len) {
+        if (line[i] == '\x1b') {
+            while (i < line.len and line[i] != 'm') : (i += 1) {}
+            if (i < line.len) i += 1;
+        } else if (line[i] == '$' and i + 4 < line.len and line[i + 1] == '{' and line[i + 2] == 'c' and std.ascii.isDigit(line[i + 3]) and line[i + 4] == '}') {
+            i += 5;
+        } else if (line[i] == '$' and i + 1 < line.len and std.ascii.isDigit(line[i + 1])) {
+            i += 2;
+        } else {
+            width += 1;
+            i += 1;
+        }
     }
-
-    return result;
+    return width;
 }
 
-fn getLineWidths(ascii_art: []const u8, allocator: std.mem.Allocator) ![]usize {
+fn getLineWidths(ascii_art: []const u8, allocator: std.mem.Allocator, comptime visible: bool) ![]usize {
     var widths = std.array_list.Managed(usize).init(allocator);
     errdefer widths.deinit();
 
     var lines = std.mem.splitSequence(u8, ascii_art, "\n");
     while (lines.next()) |line| {
-        const result = processLine(line, allocator, undefined) catch line;
-        const visual_length: usize = result.len;
-        try widths.append(visual_length);
+        try widths.append(if (visible) visibleWidth(line) else line.len);
     }
 
     return widths.toOwnedSlice();
 }
 
 fn getMaxWidth(ascii_art: []const u8, allocator: std.mem.Allocator) usize {
-    const lines = getLineWidths(ascii_art, allocator) catch return 0;
-    var max = lines[0];
+    const lines = getLineWidths(ascii_art, allocator, true) catch return 0;
+    var max: usize = 0;
     for (lines) |value| {
         max = @max(max, value);
     }
@@ -537,33 +512,24 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
     var i: usize = 0;
 
     while (i < ascii_art.len) {
-        const remaining_space: usize = ascii_art.len - i;
-        //if we have a $, check for color codes and replace
-        if (ascii_art[i] == '$' and remaining_space > 1) {
-            color_found = true;
-            const color_index = ascii_art[i + 1] - '0';
-            if (color_index < 0 or color_index >= 16) {
-                break;
-            }
-
-            try result.appendSlice(try intToANSI(allocator, color_index, color_scheme));
-            current_color = color_index;
-            i += 2;
-            continue;
-        }
-
-        //same check for curly brace variant
-        if (ascii_art[i] == '$' and remaining_space > 4) {
-            color_found = true;
-            if (ascii_art[i + 1] == '{' and i + 4 < ascii_art.len and ascii_art[i + 4] == '}') {
-                const color_index = ascii_art[i + 3] - '0';
-                if (color_index < 0 or color_index >= 16) {
-                    break;
-                }
-
+        if (ascii_art[i] == '$' and i + 4 < ascii_art.len and ascii_art[i + 1] == '{' and ascii_art[i + 2] == 'c' and std.ascii.isDigit(ascii_art[i + 3]) and ascii_art[i + 4] == '}') {
+            const color_index = ascii_art[i + 3] - '0';
+            if (color_index < 16) {
+                color_found = true;
                 try result.appendSlice(try intToANSI(allocator, color_index, color_scheme));
                 current_color = color_index;
                 i += 5;
+                continue;
+            }
+        }
+
+        if (ascii_art[i] == '$' and i + 1 < ascii_art.len and std.ascii.isDigit(ascii_art[i + 1])) {
+            const color_index = ascii_art[i + 1] - '0';
+            if (color_index < 16) {
+                color_found = true;
+                try result.appendSlice(try intToANSI(allocator, color_index, color_scheme));
+                current_color = color_index;
+                i += 2;
                 continue;
             }
         }
@@ -579,24 +545,22 @@ fn colorize(allocator: std.mem.Allocator, ascii_art: []const u8, color_scheme: [
         i += 1;
     }
 
-    // Handle single color scheme
     if (!color_found) {
-        try result.insertSlice(0, "$1");
-        return try colorize(allocator, try result.toOwnedSlice(), color_scheme);
+        try result.insertSlice(0, try intToANSI(allocator, 1, color_scheme));
     }
 
-    try result.appendSlice("\x1b[0m"); // Reset color at the end
+    try result.appendSlice("\x1b[0m");
     return result.toOwnedSlice();
 }
 
 fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator) !void {
     const logo_info = try fetch.getLogo(allocator, logo.properties.get("image") orelse "");
     const ascii_art = logo_info.ascii orelse return error.AsciiFetchFailed;
-    const color_scheme = try logo_info.colorsAsNums();
+    const color_scheme = try logo_info.colorsAsNums(allocator);
     const ascii_art_color = colorize(allocator, ascii_art, color_scheme) catch ascii_art;
     const logo_width = getMaxWidth(ascii_art, allocator);
-    const line_widths = try getLineWidths(ascii_art_color, allocator);
-    const visual_line_widths = try getLineWidths(ascii_art, allocator);
+    const line_widths = try getLineWidths(ascii_art_color, allocator, false);
+    const visual_line_widths = try getLineWidths(ascii_art, allocator, true);
     var ascii_lines = std.mem.splitSequence(u8, ascii_art_color, newline);
     const padding = 3;
     const position = logo.properties.get("position") orelse "Inline";
@@ -608,7 +572,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
                 var curr_line = try allocator.alloc(u8, logo_width + ((line_widths[row] - visual_line_widths[row])) + padding);
                 @memset(curr_line, ' ');
                 @memcpy(curr_line[0..line_itr.len], line_itr);
-                buffer.insert(curr_line) catch {};
+                try buffer.insert(curr_line);
                 row += 1;
             }
         },
@@ -620,7 +584,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
                 @memset(curr_line, ' ');
                 @memcpy(curr_line[0..line_itr.len], line_itr);
                 buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], curr_line.len);
-                buffer.insert(curr_line) catch {};
+                try buffer.insert(curr_line);
                 row += 1;
             }
             while (row < buffer.getCurrentRow()) {
@@ -629,7 +593,7 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
                     c.* = ' ';
                 }
                 buffer.segment_offsets.items[buffer.current_row] = @max(buffer.segment_offsets.items[buffer.current_row], logo_width);
-                buffer.insert(blank_width[0..]) catch {};
+                try buffer.insert(blank_width[0..]);
                 row += 1;
             }
             buffer.current_row = 0;
@@ -638,13 +602,13 @@ fn renderLogo(logo: Component, buffer: *buf.Buffer, allocator: std.mem.Allocator
             var row_max: usize = 0;
             for (buffer.lines.items) |item| {
                 const visual_line = std.mem.trimEnd(u8, try allocator.dupe(u8, item), " ");
-                row_max = @max(row_max, try buffer.stripTerminalCodes(visual_line));
+                row_max = @max(row_max, buffer.stripTerminalCodes(visual_line));
             }
             buffer.current_row = 0;
             var row: usize = 0;
             while (ascii_lines.next()) |line_itr| {
                 const visual_line = std.mem.trimEnd(u8, try allocator.dupe(u8, buffer.lines.items[row]), " ");
-                const stripped_line = try buffer.stripTerminalCodes(visual_line);
+                const stripped_line = buffer.stripTerminalCodes(visual_line);
                 try buffer.write(row, row_max + (visual_line.len - stripped_line) + padding, line_itr);
                 if (row >= buffer.getCurrentRow()) {
                     try buffer.addRow();

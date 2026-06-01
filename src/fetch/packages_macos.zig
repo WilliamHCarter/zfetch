@@ -11,7 +11,7 @@ pub fn getMacosPackages(allocator: mem.Allocator) ![]const u8 {
 
     const brew_count = getBrewPackages(allocator) catch 0;
     if (brew_count != 0) {
-        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (brew)", .{brew_count}));
+        try list.print("{d} (brew)", .{brew_count});
         has_previous = true;
     }
 
@@ -20,7 +20,7 @@ pub fn getMacosPackages(allocator: mem.Allocator) ![]const u8 {
         if (has_previous) {
             try list.appendSlice(", ");
         }
-        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (macports)", .{macports_count}));
+        try list.print("{d} (macports)", .{macports_count});
     }
 
     return list.toOwnedSlice();
@@ -47,10 +47,7 @@ fn getMacPortsPackages(allocator: mem.Allocator) !usize {
 fn countDirs(path: []const u8) !usize {
     var count: usize = 0;
     const io = std.Io.Threaded.global_single_threaded.io();
-    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch |err| {
-        std.debug.print("Error opening directory: {}\n", .{err});
-        return count;
-    };
+    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch return count;
 
     defer dir.close(io);
     var iter = dir.iterate();

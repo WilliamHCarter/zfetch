@@ -2,8 +2,6 @@ const std = @import("std");
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const env = @import("../utils/env.zig");
-const fetch = @import("../fetch.zig");
-const windows = @import("std.os.windows");
 
 pub fn getWindowsPackages(allocator: Allocator) ![]const u8 {
     var list = std.array_list.Managed(u8).init(allocator);
@@ -15,7 +13,7 @@ pub fn getWindowsPackages(allocator: Allocator) ![]const u8 {
         if (has_previous) {
             try list.appendSlice(", ");
         }
-        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (choco)", .{choco_count}));
+        try list.print("{d} (choco)", .{choco_count});
         has_previous = true;
     }
     const scoop_count = getScoopPackages(allocator) catch 0;
@@ -23,7 +21,7 @@ pub fn getWindowsPackages(allocator: Allocator) ![]const u8 {
         if (has_previous) {
             try list.appendSlice(", ");
         }
-        try list.appendSlice(try std.fmt.allocPrint(allocator, "{d} (scoop)", .{scoop_count}));
+        try list.print("{d} (scoop)", .{scoop_count});
         has_previous = true;
     }
 
@@ -54,35 +52,10 @@ fn getScoopPackages(allocator: Allocator) !usize {
     return count - 1;
 }
 
-// This is slow, so we'll deal with it later maybe...
-// fn getWingetPackages(allocator: allocator) !usize {
-//     const winget_command = fetch.execCommand(allocator, &[_][]const u8{ "winget", "list", "--disable-interactivity" }, "") catch |err| {
-//         std.debug.print("Error running winget: {}\n", .{err});
-//         return 0;
-//     };
-
-//     //remove the header from the output
-//     const header_start = std.mem.indexOf(u8, winget_command, "--\r\n");
-//     if (header_start == null) return 0;
-
-//     const trimmed_output = winget_command[header_start.? + 4 ..];
-
-//     var count: usize = 0;
-//     for (trimmed_output) |line| {
-//         if (line == '\n') {
-//             count += 1;
-//         }
-//     }
-//     return count;
-// }
-
 fn countDirs(path: []const u8) !usize {
     var count: usize = 0;
     const io = std.Io.Threaded.global_single_threaded.io();
-    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch |err| {
-        std.debug.print("Error opening directory: {}\n", .{err});
-        return count;
-    };
+    var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch return count;
 
     defer dir.close(io);
     var iter = dir.iterate();

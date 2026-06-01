@@ -2,19 +2,6 @@ const std = @import("std");
 const logo_list = @import("../info.zig").logo_list;
 const logos = @import("logos");
 
-pub const Ascii = struct {
-    name: []const u8,
-    content: []const u8,
-};
-
-pub fn getAsciiList() !std.array_list.Managed(Ascii) {
-    var logo_lst = std.array_list.Managed(Ascii).init(std.heap.page_allocator);
-    inline for (logos.names) |name| {
-        try logo_lst.append(Ascii{ .name = name, .content = @embedFile(name) });
-    }
-    return logo_lst;
-}
-
 pub const LogoInfo = struct {
     names: []const []const u8,
     colors: []const Color,
@@ -41,13 +28,11 @@ pub const LogoInfo = struct {
         return false;
     }
 
-    pub fn colorsAsNums(self: LogoInfo) ![]usize {
-        var colors = try std.heap.page_allocator.alloc(usize, self.colors.len);
-
+    pub fn colorsAsNums(self: LogoInfo, allocator: std.mem.Allocator) ![]usize {
+        const colors = try allocator.alloc(usize, self.colors.len);
         for (self.colors, 0..) |c, i| {
             colors[i] = @intFromEnum(c);
         }
-
         return colors;
     }
 
@@ -62,20 +47,13 @@ pub const LogoInfo = struct {
     }
 
     pub fn getLogoFromList(name: []const u8) !LogoInfo {
-        var logo: LogoInfo = undefined;
-        var logo_found: bool = false;
+        const logo = for (logo_list) |lg| {
+            if (lg.matchNames(name)) break lg;
+        } else return error.LogoNotFound;
 
-        for (logo_list) |lg| {
-            if (lg.matchNames(name)) {
-                logo = lg;
-                logo_found = true;
-            }
-        }
-        if (!logo_found) return error.LogoNotFound;
-        const ascii_list: std.array_list.Managed(Ascii) = try getAsciiList();
-        for (ascii_list.items) |ascii_item| {
-            if (logo.matchNames(ascii_item.name)) {
-                return logo.addAscii(ascii_item.content);
+        inline for (logos.names) |ascii_name| {
+            if (logo.matchNames(ascii_name)) {
+                return logo.addAscii(@embedFile(ascii_name));
             }
         }
         return error.LogoNotFound;
@@ -85,8 +63,6 @@ pub const LogoInfo = struct {
         _ = std.Io.Dir.max_path_bytes;
         const io = std.Io.Threaded.global_single_threaded.io();
         const file_contents: []u8 = try std.Io.Dir.cwd().readFileAlloc(io, filename, std.heap.page_allocator, .limited(40960));
-        // defer std.heap.page_allocator.free(file_contents);
-        std.debug.print("content: {s}\n", .{file_contents});
         const color_line: []Color = getCustomColorLine(file_contents) catch &[_]Color{};
         const ascii_start = file_contents[std.mem.indexOf(u8, file_contents, "\n") orelse 0];
         const ascii_content = file_contents[ascii_start..];

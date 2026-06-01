@@ -111,22 +111,20 @@ pub const Buffer = struct {
         }
     }
 
-    pub fn stripTerminalCodes(self: *Buffer, input: []const u8) !usize {
-        var output = try std.array_list.Managed(u8).initCapacity(self.allocator, input.len);
-        defer output.deinit();
-
+    pub fn stripTerminalCodes(self: *Buffer, input: []const u8) usize {
+        _ = self;
+        var len: usize = 0;
         var i: usize = 0;
         while (i < input.len) {
             if (input[i] == '\x1b') {
                 while (i < input.len and input[i] != 'm') : (i += 1) {}
-                i += 1;
+                if (i < input.len) i += 1;
             } else {
-                try output.append(input[i]);
+                len += 1;
                 i += 1;
             }
         }
-
-        return output.items.len;
+        return len;
     }
 };
 
