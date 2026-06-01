@@ -445,6 +445,7 @@ pub const logo_list = [_]LogoInfo{
     LogoInfo.init(&.{ "osmc", "open source media center" }, &.{ .fg_blue, .fg_white }, null, null),
     LogoInfo.init(&.{"lmde"}, &.{ .fg_green, .fg_white }, .fg_green, .fg_white),
     LogoInfo.init(&.{ "locos", "loc-os", "loc-os linux" }, &.{ .fg_black, .fg_yellow, .fg_white }, .fg_yellow, .fg_red),
+    LogoInfo.init(&.{ "linux", "stock_linux" }, &.{ .fg_white, .fg_green, .fg_yellow }, .fg_white, .fg_green),
     LogoInfo.init(&.{"lunar"}, &.{ .fg_blue, .fg_white, .fg_yellow }, .fg_blue, .fg_white),
     LogoInfo.init(&.{ "macos", "mac" }, &.{ .fg_green, .fg_yellow, .fg_red, .fg_magenta, .fg_blue }, .fg_yellow, .fg_green),
     LogoInfo.init(&.{"orchid"}, &.{ .fg_white, .fg_magenta, .fg_magenta }, .fg_white, .fg_magenta),
