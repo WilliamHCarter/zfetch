@@ -679,16 +679,16 @@ pub fn logoFetcher(filename: []const u8) !Logo {
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) !Logo {
-    const xdg_current_desktop = try env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
-    var distro = try allocator.dupe(u8, "linux");
+    const xdg_current_desktop = env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP") catch "";
+    var distro: []const u8 = "linux";
     if (xdg_current_desktop.len > 0) {
         var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
         if (desktops.next()) |desktop| {
-            distro = try allocator.dupe(u8, desktop);
+            distro = desktop;
         }
     }
 
-    return try logoFetcher(distro);
+    return logoFetcher(distro) catch logoFetcher("linux");
 }
 
 fn darwinLogo() !Logo {
