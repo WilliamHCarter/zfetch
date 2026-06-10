@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("io.zig");
 const logo_list = @import("../info.zig").logo_list;
 const logos = @import("logos");
 
@@ -61,7 +62,7 @@ pub const LogoInfo = struct {
 
     pub fn getLogoFromFile(filename: []const u8) !LogoInfo {
         _ = std.Io.Dir.max_path_bytes;
-        const io = std.Io.Threaded.global_single_threaded.io();
+        const io = shared_io.process;
         const file_contents: []u8 = try std.Io.Dir.cwd().readFileAlloc(io, filename, std.heap.page_allocator, .limited(40960));
         const color_line: []Color = getCustomColorLine(file_contents) catch &[_]Color{};
         const ascii_start = file_contents[std.mem.indexOf(u8, file_contents, "\n") orelse 0];

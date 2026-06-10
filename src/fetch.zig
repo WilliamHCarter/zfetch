@@ -84,12 +84,11 @@ const regkey = if (builtin.os.tag == .windows) @import("utils/regkey.zig") else 
 const cwin = if (builtin.os.tag == .windows) @import("utils/windows.zig") else struct {};
 const Logo = @import("utils/logo.zig").LogoInfo;
 const logos = @import("logos");
-
-pub var process_io: std.Io = std.Io.Threaded.global_single_threaded.io();
+const shared_io = @import("utils/io.zig");
 
 //================= Helper Functions =================
 pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallback: []const u8) ![]const u8 {
-    const result = std.process.run(allocator, process_io, .{
+    const result = std.process.run(allocator, shared_io.process, .{
         .argv = argv,
         .stdout_limit = .limited(32768),
         .stderr_limit = .limited(8192),
@@ -255,7 +254,7 @@ pub fn getMemory(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxMemory(allocator: std.mem.Allocator) ![]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/meminfo", allocator, .limited(1024 * 1024));
     var memTotal: u64 = 0;
     var memAvailable: u64 = 0;
@@ -349,7 +348,7 @@ fn getBootTime(allocator: std.mem.Allocator) !i64 {
 }
 
 fn linuxUptime(allocator: std.mem.Allocator) ![]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/uptime", allocator, .limited(100));
 
     var iter = std.mem.splitSequence(u8, content, " ");

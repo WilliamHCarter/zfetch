@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const env = @import("../utils/env.zig");
@@ -54,7 +55,7 @@ fn getScoopPackages(allocator: Allocator) !usize {
 
 fn countDirs(path: []const u8, exclude: ?[]const u8) !usize {
     var count: usize = 0;
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch return count;
 
     defer dir.close(io);

@@ -1,42 +1,29 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const Allocator = std.mem.Allocator;
-const Thread = std.Thread;
-
-pub const PackageCounts = struct {
-    apt: usize = 0,
-    dnf: usize = 0,
-    pacman: usize = 0,
-    flatpak: usize = 0,
-    snap: usize = 0,
-};
 
 pub fn getLinuxPackages(allocator: std.mem.Allocator) ![]const u8 {
-    var counts = PackageCounts{};
+    const io = shared_io.process;
 
-    const threads = [_]Thread{
-        try Thread.spawn(.{}, getAptPackages, .{&counts}),
-        try Thread.spawn(.{}, getDnfPackages, .{&counts}),
-        try Thread.spawn(.{}, getPacmanPackages, .{&counts}),
-        try Thread.spawn(.{}, getFlatpakPackages, .{&counts}),
-        try Thread.spawn(.{}, getSnapPackages, .{&counts}),
+    var apt = countFilesTask(io, "/var/lib/dpkg/info", ".list");
+    var dnf = countFilesTask(io, "/var/lib/rpm", ".rpm");
+    var pacman = countDirectoriesTask(io, "/var/lib/pacman/local", null);
+    var flatpak = countDirectoriesTask(io, "/var/lib/flatpak/app", null);
+    // /snap holds one directory per installed snap, plus the `bin` wrapper dir.
+    var snap = countDirectoriesTask(io, "/snap", "bin");
+
+    const package_managers = [_]struct { count: usize, name: []const u8 }{
+        .{ .count = apt.await(io) catch 0, .name = "apt" },
+        .{ .count = dnf.await(io) catch 0, .name = "dnf" },
+        .{ .count = pacman.await(io) catch 0, .name = "pacman" },
+        .{ .count = flatpak.await(io) catch 0, .name = "flatpak" },
+        .{ .count = snap.await(io) catch 0, .name = "snap" },
     };
-
-    for (threads) |thread| {
-        thread.join();
-    }
 
     var list = std.array_list.Managed(u8).init(allocator);
     defer list.deinit();
 
     var has_previous = false;
-
-    const package_managers = [_]struct { count: usize, name: []const u8 }{
-        .{ .count = counts.apt, .name = "apt" },
-        .{ .count = counts.dnf, .name = "dnf" },
-        .{ .count = counts.pacman, .name = "pacman" },
-        .{ .count = counts.flatpak, .name = "flatpak" },
-        .{ .count = counts.snap, .name = "snap" },
-    };
 
     for (package_managers) |pm| {
         if (pm.count != 0) {
@@ -49,29 +36,20 @@ pub fn getLinuxPackages(allocator: std.mem.Allocator) ![]const u8 {
     return list.toOwnedSlice();
 }
 
-fn getAptPackages(counts: *PackageCounts) !void {
-    counts.apt = try countFiles("/var/lib/dpkg/info", ".list");
+// Directory scans block on file IO, so `concurrent` to overlap them; the
+// fallback covers single-threaded Io implementations, where they run serially.
+fn countFilesTask(io: std.Io, dir_path: []const u8, extension: []const u8) std.Io.Future(anyerror!usize) {
+    return io.concurrent(countFiles, .{ dir_path, extension }) catch
+        io.async(countFiles, .{ dir_path, extension });
 }
 
-fn getDnfPackages(counts: *PackageCounts) !void {
-    counts.dnf = try countFiles("/var/lib/rpm", ".rpm");
+fn countDirectoriesTask(io: std.Io, dir_path: []const u8, exclude: ?[]const u8) std.Io.Future(anyerror!usize) {
+    return io.concurrent(countDirectories, .{ dir_path, exclude }) catch
+        io.async(countDirectories, .{ dir_path, exclude });
 }
 
-fn getPacmanPackages(counts: *PackageCounts) !void {
-    counts.pacman = try countDirectories("/var/lib/pacman/local", null);
-}
-
-fn getFlatpakPackages(counts: *PackageCounts) !void {
-    counts.flatpak = try countDirectories("/var/lib/flatpak/app", null);
-}
-
-fn getSnapPackages(counts: *PackageCounts) !void {
-    // /snap holds one directory per installed snap, plus the `bin` wrapper dir.
-    counts.snap = try countDirectories("/snap", "bin");
-}
-
-fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
-    const io = std.Io.Threaded.global_single_threaded.io();
+fn countFiles(dir_path: []const u8, extension: []const u8) anyerror!usize {
+    const io = shared_io.process;
     var dir = std.Io.Dir.openDirAbsolute(io, dir_path, .{ .iterate = true }) catch return 0;
     defer dir.close(io);
 
@@ -86,8 +64,8 @@ fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
     return count;
 }
 
-fn countDirectories(dir_path: []const u8, exclude: ?[]const u8) !usize {
-    const io = std.Io.Threaded.global_single_threaded.io();
+fn countDirectories(dir_path: []const u8, exclude: ?[]const u8) anyerror!usize {
+    const io = shared_io.process;
     var dir = std.Io.Dir.openDirAbsolute(io, dir_path, .{ .iterate = true }) catch return 0;
     defer dir.close(io);
 

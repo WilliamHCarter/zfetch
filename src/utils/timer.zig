@@ -11,17 +11,21 @@ pub const LapEntry = struct {
     }
 };
 
+/// Wall-clock benchmark timer for the fetch/render pipeline.
+///
+/// `elapsed` is read-only and safe to call from any task; everything else is
+/// single-threaded by design: concurrent tasks time themselves with `elapsed`
+/// and hand their numbers back to the coordinating thread, which is the only
+/// caller of `recordLap`.
 pub const Timer = struct {
     start_time: u64,
     laps: std.array_list.Managed(LapEntry),
-    mutex: std.atomic.Mutex,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) !Timer {
+    pub fn init(allocator: std.mem.Allocator) Timer {
         return Timer{
             .start_time = now(),
             .laps = std.array_list.Managed(LapEntry).init(allocator),
-            .mutex = .unlocked,
             .allocator = allocator,
         };
     }
@@ -38,39 +42,19 @@ pub const Timer = struct {
         self.laps.clearRetainingCapacity();
     }
 
-    pub fn lap(self: *Timer, key: []const u8) !void {
-        const start_time = try self.startLap(key);
-        try self.endLap(key, start_time);
-    }
-
-    pub fn end(self: *Timer) u64 {
+    /// Nanoseconds since `start`.
+    pub fn elapsed(self: *const Timer) u64 {
         return elapsedSince(self.start_time);
     }
 
-    pub fn startLap(self: *Timer, key: []const u8) !u64 {
-        lock(&self.mutex);
-        defer self.mutex.unlock();
-        const lap_start = elapsedSince(self.start_time);
+    pub fn recordLap(self: *Timer, key: []const u8, lap_start: u64, lap_end: u64) !void {
         const owned_key = try self.allocator.dupe(u8, key);
+        errdefer self.allocator.free(owned_key);
         try self.laps.append(.{
             .key = owned_key,
             .start_time = lap_start,
-            .end_time = 0,
+            .end_time = lap_end,
         });
-        return lap_start;
-    }
-
-    pub fn endLap(self: *Timer, key: []const u8, start_time: u64) !void {
-        lock(&self.mutex);
-        defer self.mutex.unlock();
-        const lap_end = elapsedSince(self.start_time);
-
-        for (self.laps.items) |*lap_item| {
-            if (std.mem.eql(u8, lap_item.key, key) and lap_item.start_time == start_time) {
-                lap_item.end_time = lap_end;
-                break;
-            }
-        }
     }
 
     pub fn printResults(self: *Timer, writer: anytype) !void {
@@ -83,16 +67,10 @@ pub const Timer = struct {
                 @as(f64, @floatFromInt(lap_entry.end_time - lap_entry.start_time)) / std.time.ns_per_ms,
             });
         }
-        const total_time = @as(f64, @floatFromInt(elapsedSince(self.start_time))) / std.time.ns_per_ms;
+        const total_time = @as(f64, @floatFromInt(self.elapsed())) / std.time.ns_per_ms;
         try writer.print("end: {d:.2}ms\n", .{total_time});
     }
 };
-
-fn lock(mutex: *std.atomic.Mutex) void {
-    while (!mutex.tryLock()) {
-        std.atomic.spinLoopHint();
-    }
-}
 
 fn elapsedSince(start_time: u64) u64 {
     const current = now();

@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const env = @import("../utils/env.zig");
 const fs = std.fs;
 const execCommand = @import("../fetch.zig").execCommand;
@@ -96,7 +97,7 @@ fn getUnityVersion(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn readVersionFromFile(allocator: std.mem.Allocator, file_path: []const u8, search_string: []const u8) !?[]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const content = try std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(1024 * 1024));
 
     var lines = std.mem.splitSequence(u8, content, "\n");

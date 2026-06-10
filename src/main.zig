@@ -1,9 +1,9 @@
 const std = @import("std");
 const commands = @import("commands.zig");
-const fetch = @import("fetch.zig");
+const shared_io = @import("utils/io.zig");
 
 pub fn main(init: std.process.Init) !void {
-    fetch.process_io = init.io;
+    shared_io.process = init.io;
     zfetch(init.minimal.args, init.gpa) catch |err| {
         switch (err) {
             error.InvalidCommand => std.debug.print("Invalid command. Use 'zfetch help' to see available commands.\n", .{}),

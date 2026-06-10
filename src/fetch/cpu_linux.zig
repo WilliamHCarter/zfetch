@@ -1,7 +1,8 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 
 pub fn getLinuxCPU(allocator: std.mem.Allocator) ![]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const content = try std.Io.Dir.cwd().readFileAlloc(io, "/proc/cpuinfo", allocator, .limited(1024 * 1024));
 
     var lines = std.mem.splitSequence(u8, content, "\n");

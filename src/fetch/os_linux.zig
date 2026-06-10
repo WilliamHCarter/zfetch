@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const mem = std.mem;
 const os = std.os;
 
@@ -39,7 +40,7 @@ pub fn getDistroID(allocator: mem.Allocator) !?[]const u8 {
 }
 
 fn readFile(allocator: mem.Allocator, path: []const u8) !?[]u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return null;
 }
 

@@ -5,6 +5,7 @@
 //==================================================================================================
 
 const std = @import("std");
+const shared_io = @import("utils/io.zig");
 const builtin = @import("builtin");
 const fetch = @import("fetch.zig");
 const buf = @import("utils/buffer.zig");
@@ -128,65 +129,55 @@ pub fn parseComponent(component_str: []const u8) !Component {
     return component;
 }
 //================================== Fetching ==================================
+// One async task per component. Each task owns its inputs and returns its
+// result by value, so the tasks share no mutable state and need no locks.
 fn fetchHandler(theme: Theme, allocator: std.mem.Allocator, timer: *Timer) !std.array_list.Managed(FetchResult) {
-    var mutex: std.atomic.Mutex = .unlocked;
-    var fetch_queue = try std.array_list.Managed(Component).initCapacity(allocator, theme.components.items.len);
-    defer fetch_queue.deinit();
+    const io = shared_io.process;
+    const components = theme.components.items;
 
-    try fetch_queue.appendSlice(theme.components.items);
+    var results = try std.array_list.Managed(FetchResult).initCapacity(allocator, components.len);
+    errdefer results.deinit();
 
-    var results = try std.array_list.Managed(FetchResult).initCapacity(allocator, theme.components.items.len);
+    const futures = try allocator.alloc(std.Io.Future(TimedOutcome), components.len);
+    defer allocator.free(futures);
 
-    var threads: [6]std.Thread = undefined;
-    for (&threads) |*thread| {
-        thread.* = try std.Thread.spawn(.{}, fetchWorker, .{
-            allocator,
-            &mutex,
-            &fetch_queue,
-            &results,
-            timer,
-        });
+    // These tasks block on child processes and file IO rather than compute,
+    // so each one warrants its own unit of concurrency: `concurrent`
+    // guarantees that, whereas `async` runs tasks inline once the pool
+    // saturates, which would stall this loop behind a slow fetch. The
+    // fallback covers single-threaded Io implementations (such as in tests),
+    // where fetches simply run serially.
+    for (components, futures) |component, *future| {
+        const args = .{ allocator, component, timer };
+        future.* = io.concurrent(fetchComponentTimed, args) catch io.async(fetchComponentTimed, args);
     }
 
-    for (threads) |thread| {
-        thread.join();
+    // Awaiting in theme order means results arrive already sorted. This loop
+    // must await every future before returning, so it is kept infallible.
+    for (components, futures) |component, *future| {
+        const timed = future.await(io);
+        recordFetchLap(timer, component.kind, timed);
+        results.appendAssumeCapacity(.{ .component = component, .outcome = timed.outcome });
     }
     return results;
 }
 
-fn fetchWorker(
-    allocator: std.mem.Allocator,
-    mutex: *std.atomic.Mutex,
-    fetch_queue: *std.array_list.Managed(Component),
-    fetch_results: *std.array_list.Managed(FetchResult),
-    timer: *Timer,
-) !void {
-    while (true) {
-        lock(mutex);
-        const component = if (fetch_queue.pop()) |c| c else {
-            mutex.unlock();
-            break;
-        };
-        mutex.unlock();
+const TimedOutcome = struct {
+    outcome: FetchOutcome,
+    lap_start: u64,
+    lap_end: u64,
+};
 
-        var lap_key_buffer: [32]u8 = undefined;
-        const lap_key = try std.fmt.bufPrint(&lap_key_buffer, "fetch_{s}", .{@tagName(component.kind)});
-        const start_time = try timer.startLap(lap_key);
-
-        const outcome = fetchComponent(allocator, component);
-
-        try timer.endLap(lap_key, start_time);
-
-        lock(mutex);
-        try fetch_results.append(.{ .component = component, .outcome = outcome });
-        mutex.unlock();
-    }
+fn fetchComponentTimed(allocator: std.mem.Allocator, component: Component, timer: *const Timer) TimedOutcome {
+    const lap_start = timer.elapsed();
+    const outcome = fetchComponent(allocator, component);
+    return .{ .outcome = outcome, .lap_start = lap_start, .lap_end = timer.elapsed() };
 }
 
-fn lock(mutex: *std.atomic.Mutex) void {
-    while (!mutex.tryLock()) {
-        std.atomic.spinLoopHint();
-    }
+fn recordFetchLap(timer: *Timer, kind: ComponentKind, timed: TimedOutcome) void {
+    var lap_key_buffer: [32]u8 = undefined;
+    const lap_key = std.fmt.bufPrint(&lap_key_buffer, "fetch_{s}", .{@tagName(kind)}) catch @tagName(kind);
+    timer.recordLap(lap_key, timed.lap_start, timed.lap_end) catch {};
 }
 
 fn getDistroColors(allocator: std.mem.Allocator, theme: Theme) !Colors {
@@ -236,7 +227,7 @@ const FetchResult = struct {
 };
 
 pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
-    var timer = try Timer.init(allocator);
+    var timer = Timer.init(allocator);
     defer timer.deinit();
     timer.start();
 
@@ -256,10 +247,9 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         fetch_results.deinit();
     }
 
-    const start_time = try timer.startLap("render");
+    const render_start = timer.elapsed();
     var buffer = try buf.Buffer.init(allocator, 512);
     defer buffer.deinit();
-    std.sort.insertion(FetchResult, fetch_results.items, theme, componentOrder);
 
     var logo_index: ?usize = null;
     for (fetch_results.items, 0..) |result, idx| {
@@ -284,12 +274,12 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         try renderComponent(&buffer, result.component, result.outcome.text());
     }
 
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     try buffer.render(&stdout_writer.interface);
     try stdout_writer.interface.flush();
-    try timer.endLap("render", start_time);
+    try timer.recordLap("render", render_start, timer.elapsed());
 
     if (std.c.getenv("ZFETCH_BENCH") != null) {
         var stderr_buffer: [4096]u8 = undefined;
@@ -297,17 +287,6 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
         try timer.printResults(&stderr_writer.interface);
         try stderr_writer.interface.flush();
     }
-}
-
-fn componentRank(theme: Theme, kind: ComponentKind) usize {
-    for (theme.components.items, 0..) |component, index| {
-        if (component.kind == kind) return index;
-    }
-    return theme.components.items.len;
-}
-
-fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
-    return componentRank(theme, a.component.kind) < componentRank(theme, b.component.kind);
 }
 
 fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []const u8) !void {
@@ -642,27 +621,6 @@ test "parseComponent parses kind and key/value properties" {
 
 test "parseComponent rejects unknown component kinds" {
     try std.testing.expectError(error.UnknownComponentKind, parseComponent("NotAComponent"));
-}
-
-test "componentOrder follows theme order and is a strict weak ordering" {
-    const newline_str = newline;
-    const allocator = std.testing.allocator;
-    const content = try std.mem.concat(allocator, u8, &.{
-        "<OS>",  newline_str,
-        "<CPU>", newline_str,
-    });
-    defer allocator.free(content);
-
-    var theme = try loadTheme(content);
-    defer theme.deinit();
-
-    const os_result = FetchResult{ .component = .{ .kind = .OS, .properties = undefined }, .outcome = .{ .success = "" } };
-    const cpu_result = FetchResult{ .component = .{ .kind = .CPU, .properties = undefined }, .outcome = .{ .success = "" } };
-
-    try std.testing.expect(componentOrder(theme, os_result, cpu_result));
-    try std.testing.expect(!componentOrder(theme, cpu_result, os_result));
-    // lessThan(a, a) must be false for a valid strict weak ordering.
-    try std.testing.expect(!componentOrder(theme, os_result, os_result));
 }
 
 test "loadTheme parses component order" {

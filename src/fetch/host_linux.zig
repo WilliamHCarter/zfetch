@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const env = @import("../utils/env.zig");
 const builtin = @import("builtin");
 const mem = std.mem;
@@ -101,7 +102,7 @@ fn joinNonEmpty(allocator: mem.Allocator, strings: []const []const u8) ![]const 
 }
 
 fn getFileContent(allocator: mem.Allocator, path: []const u8) !?[]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return null;
     return mem.trim(u8, content, &std.ascii.whitespace);
 }

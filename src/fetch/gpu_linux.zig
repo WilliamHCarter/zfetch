@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxGPU(allocator: std.mem.Allocator) ![]const u8 {
@@ -11,7 +12,7 @@ pub fn getLinuxGPU(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn getGPUInfoFromSys(allocator: std.mem.Allocator) ![]const u8 {
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     var dir = try std.Io.Dir.openDirAbsolute(io, "/sys/class/drm", .{ .iterate = true });
     defer dir.close(io);
 

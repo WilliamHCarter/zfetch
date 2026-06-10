@@ -1,4 +1,5 @@
 const std = @import("std");
+const shared_io = @import("../utils/io.zig");
 
 pub const OSResult = struct {
     name: []u8,
@@ -8,7 +9,7 @@ pub const OSResult = struct {
 
 pub fn parseOS(allocator: std.mem.Allocator) !OSResult {
     const file_path = "/System/Library/CoreServices/SystemVersion.plist";
-    const io = std.Io.Threaded.global_single_threaded.io();
+    const io = shared_io.process;
     const file_contents = try std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .unlimited);
 
     var result = OSResult{
