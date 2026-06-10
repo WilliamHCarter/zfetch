@@ -97,7 +97,10 @@ pub fn execCommand(allocator: std.mem.Allocator, argv: []const []const u8, fallb
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
 
-    if (result.stderr.len > 0) return error.CommandError;
+    switch (result.term) {
+        .exited => |code| if (code != 0) return allocator.dupe(u8, fallback),
+        else => return allocator.dupe(u8, fallback),
+    }
 
     const trimmed_result = std.mem.trim(u8, result.stdout, "\n");
     return allocator.dupe(u8, trimmed_result);
@@ -494,7 +497,7 @@ fn bsdTerminal(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsTerminal(allocator: std.mem.Allocator) ![]const u8 {
-    const term = terminal_windows.fetchTerminal(allocator) catch return "Fetch Error";
+    const term = try terminal_windows.fetchTerminal(allocator);
     return term.pretty_name;
 }
 //================= Fetch Resolution =================
@@ -539,7 +542,7 @@ fn windowsDE(allocator: std.mem.Allocator) ![]const u8 {
     const os_version = try windowsOS(allocator);
     const major_version = try parseMajorVersion(os_version);
     return switch (major_version) {
-        10 => "Fluent",
+        10, 11 => "Fluent",
         8 => "Metro",
         7, 6 => "Aero",
         5 => "Luna",
@@ -569,15 +572,11 @@ pub fn getWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn linuxWM(allocator: std.mem.Allocator) ![]const u8 {
-    return wm_linux.getLinuxWM(allocator) catch |err| {
-        return std.fmt.allocPrint(allocator, "Fetch Error: {any}", .{err});
-    };
+    return wm_linux.getLinuxWM(allocator);
 }
 
 fn darwinWM(allocator: std.mem.Allocator) ![]const u8 {
-    return wm_macos.getMacosWM(allocator) catch {
-        return "Call Failed";
-    };
+    return wm_macos.getMacosWM(allocator);
 }
 
 fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
@@ -585,9 +584,7 @@ fn bsdWM(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 fn windowsWM(allocator: std.mem.Allocator) ![]const u8 {
-    return wm_windows.getWindowsWM(allocator) catch {
-        return "Call Failed";
-    };
+    return wm_windows.getWindowsWM(allocator);
 }
 
 //================= Fetch Theme =================
@@ -608,7 +605,7 @@ fn darwinTheme(allocator: std.mem.Allocator) ![]const u8 {
     }) catch "Light";
 
     const theme = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleInterfaceStyle", global_preferences }, "Light") catch "Light";
-    const color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences, "2>/dev/null" }, "-2") catch "-2";
+    const color_str = execCommand(allocator, &[_][]const u8{ "/usr/libexec/PlistBuddy", "-c", "Print AppleAccentColor", global_preferences }, "-2") catch "-2";
     const color = switch (std.fmt.parseInt(i32, color_str, 10) catch -2) {
         -1 => "Graphite",
         0 => "Red",
@@ -679,14 +676,8 @@ pub fn logoFetcher(filename: []const u8) !Logo {
 }
 
 fn linuxLogo(allocator: std.mem.Allocator) !Logo {
-    const xdg_current_desktop = env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP") catch "";
-    var distro: []const u8 = "linux";
-    if (xdg_current_desktop.len > 0) {
-        var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
-        if (desktops.next()) |desktop| {
-            distro = desktop;
-        }
-    }
+    const distro_id = (os_linux.getDistroID(allocator) catch null) orelse "linux";
+    const distro = std.ascii.allocLowerString(allocator, distro_id) catch distro_id;
 
     return logoFetcher(distro) catch logoFetcher("linux");
 }

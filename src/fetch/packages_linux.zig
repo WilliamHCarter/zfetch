@@ -41,7 +41,7 @@ pub fn getLinuxPackages(allocator: std.mem.Allocator) ![]const u8 {
     for (package_managers) |pm| {
         if (pm.count != 0) {
             if (has_previous) try list.appendSlice(", ");
-            try list.print("{d} ({s})", .{ pm.count - 1, pm.name });
+            try list.print("{d} ({s})", .{ pm.count, pm.name });
             has_previous = true;
         }
     }
@@ -58,15 +58,16 @@ fn getDnfPackages(counts: *PackageCounts) !void {
 }
 
 fn getPacmanPackages(counts: *PackageCounts) !void {
-    counts.pacman = try countDirectories("/var/lib/pacman/local");
+    counts.pacman = try countDirectories("/var/lib/pacman/local", null);
 }
 
 fn getFlatpakPackages(counts: *PackageCounts) !void {
-    counts.flatpak = try countDirectories("/var/lib/flatpak/app");
+    counts.flatpak = try countDirectories("/var/lib/flatpak/app", null);
 }
 
 fn getSnapPackages(counts: *PackageCounts) !void {
-    counts.snap = try countDirectories("/snap");
+    // /snap holds one directory per installed snap, plus the `bin` wrapper dir.
+    counts.snap = try countDirectories("/snap", "bin");
 }
 
 fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
@@ -85,7 +86,7 @@ fn countFiles(dir_path: []const u8, extension: []const u8) !usize {
     return count;
 }
 
-fn countDirectories(dir_path: []const u8) !usize {
+fn countDirectories(dir_path: []const u8, exclude: ?[]const u8) !usize {
     const io = std.Io.Threaded.global_single_threaded.io();
     var dir = std.Io.Dir.openDirAbsolute(io, dir_path, .{ .iterate = true }) catch return 0;
     defer dir.close(io);
@@ -93,9 +94,11 @@ fn countDirectories(dir_path: []const u8) !usize {
     var count: usize = 0;
     var iter = dir.iterate();
     while (try iter.next(io)) |entry| {
-        if (entry.kind == .directory) {
-            count += 1;
+        if (entry.kind != .directory) continue;
+        if (exclude) |name| {
+            if (std.mem.eql(u8, entry.name, name)) continue;
         }
+        count += 1;
     }
     return count;
 }

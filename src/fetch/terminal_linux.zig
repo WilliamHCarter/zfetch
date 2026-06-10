@@ -23,6 +23,8 @@ pub fn getLinuxTerminal(allocator: std.mem.Allocator) ![]const u8 {
 fn envFetchHelper(allocator: std.mem.Allocator, info: *TerminalInfo, temp: TerminalInfo) !bool {
     if (env.getEnvVarOwned(allocator, temp.env_var)) |env_value| {
         info.name = try allocator.dupe(u8, temp.name);
+        info.env_var = temp.env_var;
+        info.version = env_value;
         info.pretty_name = if (temp.pretty_name.len > 0)
             try std.fmt.allocPrint(allocator, "{s}", .{temp.pretty_name})
         else
@@ -70,11 +72,10 @@ fn fetchFromEnv(allocator: std.mem.Allocator, info: *TerminalInfo) !bool {
 }
 
 fn getTerminalVersion(allocator: std.mem.Allocator, info: TerminalInfo) ![]const u8 {
-    if (std.mem.eql(u8, info.name, "Konsole") or
-        std.mem.eql(u8, info.name, "XTerm") or
-        std.mem.eql(u8, info.name, "Kitty"))
-    {
-        return try allocator.dupe(u8, info.env_var);
+    // KONSOLE_VERSION and XTERM_VERSION hold the version directly.
+    if (std.mem.eql(u8, info.name, "Konsole") or std.mem.eql(u8, info.name, "XTerm")) {
+        const version = info.version orelse return error.VersionNotFound;
+        return try allocator.dupe(u8, version);
     }
 
     if (std.mem.eql(u8, info.name, "Gnome")) {

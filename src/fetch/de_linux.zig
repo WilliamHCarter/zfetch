@@ -4,13 +4,13 @@ const fs = std.fs;
 const execCommand = @import("../fetch.zig").execCommand;
 
 pub fn getLinuxDE(allocator: std.mem.Allocator) ![]const u8 {
-    const xdg_current_desktop = try env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP");
+    const xdg_current_desktop = env.getEnvVarOwned(allocator, "XDG_CURRENT_DESKTOP") catch "";
 
     if (xdg_current_desktop.len > 0) {
-        var desktops = std.mem.splitSequence(u8, xdg_current_desktop, ":");
-        _ = desktops.next(); // Skip the first entry (distro)
-
-        const name = try allocator.dupe(u8, desktops.next() orelse "");
+        // Colon-separated list where the base DE comes last ("ubuntu:GNOME"),
+        // but a single entry ("GNOME") is just as common.
+        var desktops = std.mem.splitBackwardsScalar(u8, xdg_current_desktop, ':');
+        const name = try allocator.dupe(u8, desktops.next() orelse xdg_current_desktop);
         const version = try getDEVersion(allocator, name);
 
         return std.fmt.allocPrint(allocator, "{s} {s}", .{ name, version });
@@ -112,7 +112,7 @@ fn readVersionFromFile(allocator: std.mem.Allocator, file_path: []const u8, sear
 }
 
 fn detectDEFallback(allocator: std.mem.Allocator) ![]const u8 {
-    const desktop_session = try env.getEnvVarOwned(allocator, "DESKTOP_SESSION");
+    const desktop_session = env.getEnvVarOwned(allocator, "DESKTOP_SESSION") catch "";
 
     if (desktop_session.len > 0) {
         const name = try allocator.dupe(u8, fs.path.basename(desktop_session));

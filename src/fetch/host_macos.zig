@@ -3,8 +3,8 @@ const info = @import("../info.zig");
 
 extern "c" fn sysctlbyname(name: [*:0]const u8, oldp: ?*anyopaque, oldlenp: *usize, newp: ?*anyopaque, newlen: usize) c_int;
 
-pub fn getHost(allocator: std.mem.Allocator) []const u8 {
-    const model = sysctlGetString(allocator, "hw.model") catch "Fetch Error";
+pub fn getHost(allocator: std.mem.Allocator) ![]const u8 {
+    const model = try sysctlGetString(allocator, "hw.model");
     return getNameFromHwModel(model) orelse model;
 }
 

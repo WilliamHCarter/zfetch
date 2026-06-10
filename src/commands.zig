@@ -66,9 +66,10 @@ pub fn loadGivenTheme(args: []const []const u8, allocator: std.mem.Allocator) !v
                 std.debug.print("Failed to load theme {s}: {any}\n", .{ args[0], err });
                 return;
             };
-            try layout.render(given_theme, allocator);
+            return layout.render(given_theme, allocator);
         }
     }
+    return CommandError.InvalidTheme;
 }
 
 pub fn listThemes() !void {
@@ -181,6 +182,10 @@ test "parseCommand maps supported command aliases" {
 
 test "parseCommand rejects unknown commands" {
     try std.testing.expectError(CommandError.InvalidCommand, parseCommand("--not-a-command"));
+}
+
+test "loadGivenTheme rejects unknown themes" {
+    try std.testing.expectError(CommandError.InvalidTheme, loadGivenTheme(&.{"no-such-theme"}, std.testing.allocator));
 }
 
 test "embedded themes are available and parseable" {

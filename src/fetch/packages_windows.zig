@@ -34,7 +34,7 @@ fn getChocoPackages(allocator: Allocator) !usize {
     };
 
     const choco_path = try fs.path.join(allocator, &[_][]const u8{ choco_env, "lib" });
-    return countDirs(choco_path);
+    return countDirs(choco_path, null);
 }
 
 fn getScoopPackages(allocator: Allocator) !usize {
@@ -48,11 +48,11 @@ fn getScoopPackages(allocator: Allocator) !usize {
         scoop_path = try fs.path.join(allocator, &[_][]const u8{ home_dir, "scoop", "apps" });
     }
 
-    const count: usize = try countDirs(scoop_path);
-    return count - 1;
+    // `apps` holds one directory per installed app, plus scoop's own install dir.
+    return countDirs(scoop_path, "scoop");
 }
 
-fn countDirs(path: []const u8) !usize {
+fn countDirs(path: []const u8, exclude: ?[]const u8) !usize {
     var count: usize = 0;
     const io = std.Io.Threaded.global_single_threaded.io();
     var dir = std.Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch return count;
@@ -60,9 +60,11 @@ fn countDirs(path: []const u8) !usize {
     defer dir.close(io);
     var iter = dir.iterate();
     while (try iter.next(io)) |entry| {
-        if (entry.kind == .directory) {
-            count += 1;
+        if (entry.kind != .directory) continue;
+        if (exclude) |name| {
+            if (std.mem.eql(u8, entry.name, name)) continue;
         }
+        count += 1;
     }
 
     return count;

@@ -173,12 +173,12 @@ fn fetchWorker(
         const lap_key = try std.fmt.bufPrint(&lap_key_buffer, "fetch_{s}", .{@tagName(component.kind)});
         const start_time = try timer.startLap(lap_key);
 
-        const result = fetchComponent(allocator, component);
+        const outcome = fetchComponent(allocator, component);
 
         try timer.endLap(lap_key, start_time);
 
         lock(mutex);
-        try fetch_results.append(.{ .component = component, .result = result });
+        try fetch_results.append(.{ .component = component, .outcome = outcome });
         mutex.unlock();
     }
 }
@@ -218,9 +218,21 @@ fn getDistroColors(allocator: std.mem.Allocator, theme: Theme) !Colors {
 }
 
 //================================ Rendering ===================================
+const FetchOutcome = union(enum) {
+    success: []const u8,
+    failure: anyerror,
+
+    fn text(self: FetchOutcome) []const u8 {
+        return switch (self) {
+            .success => |value| value,
+            .failure => "Fetch Error",
+        };
+    }
+};
+
 const FetchResult = struct {
     component: Component,
-    result: []const u8,
+    outcome: FetchOutcome,
 };
 
 pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
@@ -236,7 +248,10 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     var fetch_results = try fetchHandler(theme, allocator, &timer);
     defer {
         for (fetch_results.items) |item| {
-            allocator.free(item.result);
+            switch (item.outcome) {
+                .success => |value| allocator.free(value),
+                .failure => {},
+            }
         }
         fetch_results.deinit();
     }
@@ -266,7 +281,7 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     }
 
     for (fetch_results.items) |result| {
-        try renderComponent(&buffer, result.component, result.result);
+        try renderComponent(&buffer, result.component, result.outcome.text());
     }
 
     const io = std.Io.Threaded.global_single_threaded.io();
@@ -284,18 +299,15 @@ pub fn render(theme: Theme, allocator: std.mem.Allocator) !void {
     }
 }
 
-fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
-    for (theme.components.items) |component| {
-        if (a.component.kind == b.component.kind) {
-            return true;
-        }
-        if (component.kind == a.component.kind) {
-            return true;
-        } else if (component.kind == b.component.kind) {
-            return false;
-        }
+fn componentRank(theme: Theme, kind: ComponentKind) usize {
+    for (theme.components.items, 0..) |component, index| {
+        if (component.kind == kind) return index;
     }
-    return false;
+    return theme.components.items.len;
+}
+
+fn componentOrder(theme: Theme, a: FetchResult, b: FetchResult) bool {
+    return componentRank(theme, a.component.kind) < componentRank(theme, b.component.kind);
 }
 
 fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []const u8) !void {
@@ -324,12 +336,12 @@ fn renderComponent(buffer: *buf.Buffer, component: Component, fetched_result: []
     }
 }
 
-fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8 {
+fn fetchComponent(allocator: std.mem.Allocator, component: Component) FetchOutcome {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_alloc = arena.allocator();
 
-    const fetched_component: []const u8 = switch (component.kind) {
+    const fetched_component: anyerror![]const u8 = switch (component.kind) {
         .Username => fetch.getUsername(arena_alloc),
         .OS => fetch.getOS(arena_alloc),
         .Hostname => fetch.getHostDevice(arena_alloc),
@@ -345,9 +357,11 @@ fn fetchComponent(allocator: std.mem.Allocator, component: Component) []const u8
         .CPU => fetch.getCPU(arena_alloc),
         .GPU => fetch.getGPU(arena_alloc),
         .Memory, .Logo, .TopBar, .Colors => "",
-    } catch "Fetch Error";
+    };
 
-    return allocator.dupe(u8, fetched_component) catch "Fetch Error";
+    const value = fetched_component catch |err| return .{ .failure = err };
+    const owned = allocator.dupe(u8, value) catch |err| return .{ .failure = err };
+    return .{ .success = owned };
 }
 
 //============================= Memory Rendering ===============================
@@ -396,14 +410,11 @@ fn toMemoryString(mem_used: []const u8, mem_total: []const u8, unit: MemoryUnit,
 }
 
 fn renderMemory(component: Component, allocator: std.mem.Allocator) []const u8 {
-    var memory = fetch.getMemory(allocator) catch "Fetch Error";
-    if (std.mem.eql(u8, memory, "Windows")) {
-        return memory;
-    }
+    var memory = fetch.getMemory(allocator) catch return "Fetch Error";
 
     var it = std.mem.splitSequence(u8, memory, " / ");
-    const mem_used = it.next() orelse unreachable;
-    const mem_total = it.next() orelse unreachable;
+    const mem_used = it.next() orelse return memory;
+    const mem_total = it.next() orelse return memory;
     const unit = component.properties.get("unit") orelse "Auto";
 
     switch (std.meta.stringToEnum(MemoryUnit, unit) orelse .Auto) {
@@ -631,6 +642,27 @@ test "parseComponent parses kind and key/value properties" {
 
 test "parseComponent rejects unknown component kinds" {
     try std.testing.expectError(error.UnknownComponentKind, parseComponent("NotAComponent"));
+}
+
+test "componentOrder follows theme order and is a strict weak ordering" {
+    const newline_str = newline;
+    const allocator = std.testing.allocator;
+    const content = try std.mem.concat(allocator, u8, &.{
+        "<OS>",  newline_str,
+        "<CPU>", newline_str,
+    });
+    defer allocator.free(content);
+
+    var theme = try loadTheme(content);
+    defer theme.deinit();
+
+    const os_result = FetchResult{ .component = .{ .kind = .OS, .properties = undefined }, .outcome = .{ .success = "" } };
+    const cpu_result = FetchResult{ .component = .{ .kind = .CPU, .properties = undefined }, .outcome = .{ .success = "" } };
+
+    try std.testing.expect(componentOrder(theme, os_result, cpu_result));
+    try std.testing.expect(!componentOrder(theme, cpu_result, os_result));
+    // lessThan(a, a) must be false for a valid strict weak ordering.
+    try std.testing.expect(!componentOrder(theme, os_result, os_result));
 }
 
 test "loadTheme parses component order" {
