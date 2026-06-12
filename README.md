@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="readme-header.svg" width="400" height="100" alt="zfetch">
+  <img src="readme-header.svg" width="400" alt="zfetch">
 </div>
 <p align="center">A command-line system information tool written in Zig</p>
 <div align="center">
